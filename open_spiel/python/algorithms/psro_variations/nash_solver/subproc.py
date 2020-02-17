@@ -4,6 +4,10 @@ import signal
 import os
 import logging
 
+"""
+This script provides subprocess API for gambit solver.
+"""
+
 def call_and_wait_with_timeout(command_str, timeout):
     logging.info("Will run:\n" + command_str)
     my_process = subprocess.Popen(command_str, shell=True, preexec_fn=os.setsid)

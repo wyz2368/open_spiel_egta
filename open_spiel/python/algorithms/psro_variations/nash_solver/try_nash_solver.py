@@ -2,6 +2,10 @@ from open_spiel.python.algorithms.psro_variations.nash_solver import general_nas
 
 import numpy as np
 
+"""
+Test NE solver.
+"""
+
 # Games
 
 # (1) Matching Pennies
@@ -31,25 +35,6 @@ elif game_name == 'BC':
 else:
     raise ValueError("Game does not exist.")
 
-# gt.encode_gambit_file(meta_games)
-# gt.gambit_analysis(600)
-# equilibria = gt.decode_gambit_file(meta_games, mode="all")
-# for eq in equilibria:
-#     print(eq)
-
-# equilibria = gt.do_gambit_analysis(meta_games, mode="pure", timeout = 600)
-# for eq in equilibria:
-#     print(eq)
-
 equilibria = gs.nash_solver(meta_games, solver="gambit", mode='all')
-print(equilibria)
 for eq in equilibria:
     print(eq)
-
-# tol = 1e-6
-# row_payoffs, col_payoffs = meta_games[0], meta_games[1]
-# pure_nash = list(
-#   zip(*((row_payoffs >= row_payoffs.max(0, keepdims=True) - tol)
-#         & (col_payoffs >= col_payoffs.max(1, keepdims=True) - tol)
-#        ).nonzero()))
-# print(pure_nash)

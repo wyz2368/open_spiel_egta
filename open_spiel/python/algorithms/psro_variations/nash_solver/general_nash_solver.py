@@ -12,23 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Find Nash equilibria for constant- or general-sum 2-player games.
-Non-matrix games are handled by computing the normal (bimatrix) form.
-The algorithms used are:
-* direct computation of pure equilibria.
-* linear programming to find equilibria for constant-sum games.
-* iterated dominance to reduce the action space.
-* reverse search vertex enumeration (if using lrsnash) to find all general-sum
-  equilibria.
-* support enumeration (if using nashpy) to find all general-sum equilibria.
-* Lemke-Howson enumeration (if using nashpy) to find one general-sum
-  equilibrium.
-The general-sum mixed-equilibrium algorithms are likely to work well for tens of
-actions, but less likely to scale beyond that.
-Example usage:
-```
-matrix_nash --game kuhn_poker
-```
+"""
+This script provides a general Nash equilibrium solver that can solve general-sum many-player games.
 """
 
 from __future__ import absolute_import
@@ -158,9 +143,22 @@ def lemke_howson_solve(row_payoffs, col_payoffs):
         warnings.showwarning = showwarning
 
 def gambit_solve(meta_games, mode):
+    """
+    Find NE using gambit.
+    :param meta_games: meta-games in PSRO.
+    :param mode: options "all", "one", "pure"
+    :return: a list of NE.
+    """
     return do_gambit_analysis(meta_games, mode)
 
 def pure_ne_solve(meta_games, tol=1e-7):
+    """
+    Find pure NE. Only work for two-player game. For more than 2 player case,
+    the nash_solver will call gambit to find pure NE.
+    :param meta_games: meta-games in PSRO.
+    :param tol: Error allowed.
+    :return: pure NE
+    """
     row_payoffs, col_payoffs = meta_games[0], meta_games[1]
     pure_nash = list(
         zip(*((row_payoffs >= row_payoffs.max(0, keepdims=True) - tol)
@@ -180,7 +178,14 @@ def nash_solver(meta_games,
                 solver="nashpy",
                 mode="one",
                 lrsnash_path=None):
-
+    """
+    Solver for NE.
+    :param meta_games: meta-games in PSRO.
+    :param solver: options "gambit", "nashpy", "linear", "lrsnash".
+    :param mode: options "all", "one", "pure"
+    :param lrsnash_path: path to lrsnash solver.
+    :return: a list of NE.
+    """
     num_players = len(meta_games)
     if solver == "gambit" or num_players > 2:
         return gambit_solve(meta_games, mode)

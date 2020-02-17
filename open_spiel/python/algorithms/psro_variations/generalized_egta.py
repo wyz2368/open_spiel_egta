@@ -477,3 +477,6 @@ class GenEGTASolver(abstract_meta_trainer.AbstractMetaTrainer):
   @property
   def get_strategy_computation_and_selection_kwargs(self):
     return self._strategy_computation_and_selection_kwargs
+
+
+#TODO: consider symmetric case where the strategy set is shared.

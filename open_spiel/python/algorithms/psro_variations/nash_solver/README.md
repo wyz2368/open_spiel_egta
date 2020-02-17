@@ -18,5 +18,6 @@ This directory provides a general Nash equilibrium solver that can solve general
 * **'pure'**: return pure equilibria.
 * **'one'**: return the first equilibrium. 
 
-
+## Requirements
+Before `gambit` or `Irsnash` option is used, please install the corresponding backend. Please refer to their websites for installation details.  
 

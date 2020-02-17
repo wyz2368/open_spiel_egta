@@ -5,27 +5,49 @@ import pickle
 import itertools
 import logging
 
-
-#TODO: adapt to general-sum many-player game.
-#TODO: change path.join
+"""
+This script connects meta-games with gambit. It translates a meta-game to a payoff matrix format 
+that gambit could recognize.
+Gambit file format: http://www.gambit-project.org/gambit16/16.0.0/formats.html 
+"""
 
 def isExist(path):
+    """
+    Check if a path exists.
+    :param path: path to check.
+    :return: bool
+    """
     return os.path.exists(path)
 
 def save_pkl(obj,path):
+    """
+    Pickle a object to path.
+    :param obj: object to be pickled.
+    :param path: path to save the object
+    """
     with open(path,'wb') as f:
         pickle.dump(obj,f)
 
 def load_pkl(path):
+    """
+    Load a pickled object from path
+    :param path: path to the pickled object.
+    :return: object
+    """
     if not isExist(path):
         raise ValueError(path + " does not exist.")
     with open(path,'rb') as f:
         result = pickle.load(f)
     return result
 
+# Path that saves the payoff matrix for gamebit.
 gambit_DIR = os.getcwd() + '/nfg/payoffmatrix.nfg'
 
 def encode_gambit_file(meta_games):
+    """
+    Encode a meta-game to nfg file that gambit can recognize.
+    :param meta_games: A meta-game (payoff tensor) in PSRO.
+    """
     num_players = len(meta_games)
     # Write header
     with open(gambit_DIR, "w") as nfgFile:
@@ -49,18 +71,33 @@ def encode_gambit_file(meta_games):
                 nfgFile.write(str(meta_game[tuple(current_index)]) + " ")
 
 def gambit_analysis(timeout):
+    """
+    Call a subprocess and run gambit to find all NE.
+    :param timeout: Maximum time for the subprocess.
+    """
     if not isExist(gambit_DIR):
         raise ValueError(".nfg file does not exist!")
     command_str = "gambit-gnm -q " + os.getcwd() + "/nfg/payoffmatrix.nfg -d 8 > " + os.getcwd() + "/nfg/nash.txt"
     subproc.call_and_wait_with_timeout(command_str, timeout)
 
 def gambit_analysis_pure(timeout):
+    """
+    Call a subprocess and run gambit to find pure NE.
+    :param timeout: Maximum time for the subprocess.
+    """
     if not isExist(gambit_DIR):
         raise ValueError(".nfg file does not exist!")
     command_str = "gambit-enumpure -q " + os.getcwd() + "/nfg/payoffmatrix.nfg > " + os.getcwd() + "/nfg/nash.txt"
     subproc.call_and_wait_with_timeout(command_str, timeout)
 
 def decode_gambit_file(meta_games, mode="all", max_num_nash=10):
+    """
+    Decode the results returned from gambit to a numpy format used for PSRO.
+    :param meta_games: A meta-game in PSRO.
+    :param mode: "all", "pure", "one" options
+    :param max_num_nash: the number of NE considered to return
+    :return: a list of NE
+    """
     nash_DIR = os.getcwd() + '/nfg/nash.txt'
     if not isExist(nash_DIR):
         raise ValueError("nash.txt file does not exist!")
@@ -107,6 +144,13 @@ def decode_gambit_file(meta_games, mode="all", max_num_nash=10):
 
 
 def do_gambit_analysis(meta_games, mode, timeout = 600):
+    """
+    Combine encoder and decoder.
+    :param meta_games: meta-games in PSRO.
+    :param mode: "all", "pure", "one" options
+    :param timeout: Maximum time for the subprocess
+    :return: a list of NE.
+    """
     encode_gambit_file(meta_games)
     while True:
         if mode == 'pure':
@@ -134,6 +178,11 @@ def do_gambit_analysis(meta_games, mode, timeout = 600):
 
 
 def convert(s):
+    """
+    Convert a probability string to a float number.
+    :param s: probability string.
+    :return: a float probability.
+    """
     try:
         return float(s)
     except ValueError:
@@ -141,8 +190,12 @@ def convert(s):
         return float(num) / float(denom)
 
 
-# Get number of lines in a text file.
 def file_len(fname):
+    """
+    Get the number of lines in a text file. This is used to count the number of NE found by gamebit.
+    :param fname: file name.
+    :return: number of lines.
+    """
     num_lines = sum(1 for line in open(fname))
     return num_lines
 
