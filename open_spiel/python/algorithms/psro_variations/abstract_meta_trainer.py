@@ -25,6 +25,7 @@ import numpy as np
 
 from open_spiel.python.algorithms import lp_solver
 from open_spiel.python.algorithms import projected_replicator_dynamics
+from open_spiel.python.algorithms.psro_variations.nash_solver import general_nash_solver
 import pyspiel
 
 
@@ -107,6 +108,21 @@ def nash_strategy(solver):
       renormalize(np.array(nash_prob_2).reshape(-1))
   ]
 
+# NEW
+def general_nash_strategy(solver):
+  """
+  Returns nash distribution on meta game matrix.
+  This method works for general-sum many-player games. Details see nash_solver directory.
+
+  By default, the nash solver is nashpy and returns one NE.
+
+  :param solver: GenPSROSolver instance.
+  :return: Nash distribution on strategies.
+  """
+  meta_games = solver.get_meta_game
+  equilibria = general_nash_solver.nash_solver(meta_games)
+  return equilibria
+
 
 def prd_strategy(solver):
   """Computes Projected Replicator Dynamics strategies.
@@ -127,11 +143,11 @@ def prd_strategy(solver):
 
 META_STRATEGY_METHODS = {
     "uniform": uniform_strategy,
-    "nash": nash_strategy,
+    "nash": general_nash_strategy,
     "prd": prd_strategy
 }
 
-DEFAULT_META_STRATEGY_METHOD = "prd"
+DEFAULT_META_STRATEGY_METHOD = "nash"
 
 
 class AbstractMetaTrainer(object):
@@ -161,8 +177,7 @@ class AbstractMetaTrainer(object):
         returning a list of meta strategies (One list entry per player).
         String value can be:
               - "uniform": Uniform distribution on policies.
-              - "nash": Taking nash distribution. Only works for 2 player, 0-sum
-                games.
+              - "nash": Taking nash distribution.
               - "prd": Projected Replicator Dynamics, as described in Lanctot et
                 Al.
       **kwargs: kwargs for meta strategy computation and training strategy
@@ -187,6 +202,7 @@ class AbstractMetaTrainer(object):
 
     self._initialize_policy(initial_policies)
     self._initialize_game_state()
+
 
   def _initialize_policy(self, initial_policies):
     return NotImplementedError(

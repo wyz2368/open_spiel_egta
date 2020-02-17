@@ -346,6 +346,8 @@ class UniformRandomPolicy(Policy):
     return {action: probability for action in legal_actions}
 
 
+
+
 class PolicyFromCallable(Policy):
   """For backwards-compatibility reasons, create a policy from a callable."""
 

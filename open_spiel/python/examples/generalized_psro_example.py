@@ -80,6 +80,7 @@ def main(unused_argv):
       game,
       oracle,
       sims_per_entry=FLAGS.sims_per_entry,
+      meta_strategy_method='nash',
       rectify_training=FLAGS.rectify_training)
   for a in range(FLAGS.gen_psro_iterations):
     g_psro_solver.iteration()

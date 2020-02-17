@@ -24,21 +24,13 @@ we provide this example.
 """
 
 import pickle
-
-import numpy as np
-
 import pyspiel
 
-_NUM_PLAYERS = 2
-_NUM_ROWS = 3
-_NUM_COLS = 3
-_NUM_CELLS = _NUM_ROWS * _NUM_COLS
+# pylint: disable=function-redefined
+# pylint: disable=unused-argument
 
-
-def _line_value(line):
-  """Checks a possible line, returning the winning symbol if any."""
-  if all(line == "x") or all(line == "o"):
-    return line[0]
+_GAME_NOT_DONE = -1
+_GAME_TIED = 2
 
 
 class TicTacToeState(object):
@@ -53,48 +45,88 @@ class TicTacToeState(object):
   """
 
   def __init__(self, game):
+    self._rows = 3
+    self._cols = 3
     self._game = game
     self.set_state(
-        cur_player=0,
-        winner=None,
-        is_terminal=False,
-        history=[],
-        board=np.full((_NUM_ROWS, _NUM_COLS), "."))
+        cur_player=0, winner=_GAME_NOT_DONE, history=[], board=["."] * 9)
 
   # Helper functions (not part of the OpenSpiel API).
 
-  def set_state(self, cur_player, winner, is_terminal, history, board):
+  def set_state(self, cur_player, winner, history, board):
     self._cur_player = cur_player
     self._winner = winner
-    self._is_terminal = is_terminal
     self._history = history
     self._board = board
 
+  def board(self, row, col):
+    return self._board[row * self._cols + col]
+
   def coord(self, move):
-    return (move // _NUM_COLS, move % _NUM_COLS)
+    return (move // self._cols, move % self._cols)
+
+  def has_row(self, row):
+    if (self.board(row, 0) != "." and
+        self.board(row, 0) == self.board(row, 1) and
+        self.board(row, 1) == self.board(row, 2)):
+      return self.board(row, 0)
+    else:
+      return "."
+
+  def has_col(self, col):
+    if (self.board(0, col) != "." and
+        self.board(0, col) == self.board(1, col) and
+        self.board(1, col) == self.board(2, col)):
+      return self.board(0, col)
+    else:
+      return "."
+
+  def has_slash(self):
+    if (self.board(2, 0) != "." and self.board(2, 0) == self.board(1, 1) and
+        self.board(1, 1) == self.board(0, 1)):
+      return self.board(2, 0)
+    else:
+      return "."
+
+  def has_backslash(self):
+    if (self.board(0, 0) != "." and self.board(0, 0) == self.board(1, 1) and
+        self.board(1, 1) == self.board(2, 2)):
+      return self.board(0, 0)
+    else:
+      return "."
 
   def line_exists(self):
-    """Checks if a line exists, returns "x" or "o" if so, and None otherwise."""
-    return (_line_value(self._board[0]) or _line_value(self._board[1]) or
-            _line_value(self._board[2]) or _line_value(self._board[:, 0]) or
-            _line_value(self._board[:, 1]) or _line_value(self._board[:, 2]) or
-            _line_value(self._board.diagonal()) or
-            _line_value(np.fliplr(self._board).diagonal()))
+    """Checks if a line exists, returns "x" or "o" if so, and "." otherwise."""
+    for row in range(3):
+      winner = self.has_row(row)
+      if winner != ".":
+        return winner
+    for col in range(3):
+      winner = self.has_col(col)
+      if winner != ".":
+        return winner
+    winner = self.has_backslash()
+    if winner != ".":
+      return winner
+    winner = self.has_slash()
+    if winner != ".":
+      return winner
+    return "."
 
   # OpenSpiel (PySpiel) API functions are below. These need to be provided by
-  # every game. Some not-often-used methods have been omitted.
+  # every game.
 
   def current_player(self):
-    return pyspiel.PlayerId.TERMINAL if self._is_terminal else self._cur_player
+    return self._cur_player
 
   def legal_actions(self, player=None):
-    """Returns a list of legal actions, sorted in ascending order.
+    """Get a list of legal actions.
 
     Args:
       player: the player whose legal moves
 
     Returns:
-      A list of legal moves, where each move is in [0, num_distinct_actions - 1]
+      A list of legal moves, where each move is in [0, num_distinct_actios - 1],
       at non-terminal states, and empty list at terminal states.
     """
 
@@ -104,69 +136,83 @@ class TicTacToeState(object):
       return []
     else:
       actions = []
-      for action in range(_NUM_CELLS):
-        if self._board[self.coord(action)] == ".":
-          actions.append(action)
+      for i in range(9):
+        if self._board[i] == ".":
+          actions.append(i)
       return actions
 
   def legal_actions_mask(self, player=None):
     """Get a list of legal actions.
 
     Args:
-      player: the player whose moves we want; defaults to the current player.
+      player: the player whose legal moves
 
     Returns:
-      A list of legal moves, where each move is in [0, num_distinct_actios - 1].
-      Returns an empty list at terminal states, or if it is not the specified
-      player's turn.
+      A list of legal moves, where each move is in [0, num_distinct_actios - 1],
+      at non-terminal states, and empty list at terminal states.
     """
     if player is not None and player != self._cur_player:
       return []
     elif self.is_terminal():
       return []
     else:
-      action_mask = [0] * _NUM_CELLS
-      for action in self.legal_actions():
+      action_mask = [0] * 9
+      legal_actions = self.legal_actions()
+      for action in legal_actions:
         action_mask[action] = 1
       return action_mask
 
   def apply_action(self, action):
-    """Applies the specified action to the state."""
-    self._board[self.coord(action)] = "x" if self._cur_player == 0 else "o"
+    """Apply the specific action to change the state."""
+    if self._cur_player == 0:
+      self._board[action] = "x"
+    elif self._cur_player == 1:
+      self._board[action] = "o"
+    self._cur_player = 1 - self._cur_player
+    winner = self.line_exists()
+    if winner == "x":
+      self._winner = 0
+    elif winner == "o":
+      self._winner = 1
     self._history.append(action)
-    if self.line_exists():
-      self._is_terminal = True
-      self._winner = self._cur_player
-    elif len(self._history) == _NUM_CELLS:
-      self._is_terminal = True
-    else:
-      self._cur_player = 1 - self._cur_player
+    if self._winner < 0 and len(self._history) == 9:
+      self._winner = _GAME_TIED
 
   def undo_action(self, action):
     # Optional function. Not used in many places.
-    self._board[self.coord(action)] = "."
+    self._board[action] = "."
     self._cur_player = 1 - self._cur_player
     self._history.pop()
-    self._winner = None
-    self._is_terminal = False
+    self._winner = _GAME_NOT_DONE
 
-  def action_to_string(self, arg0, arg1=None):
-    """Action -> string. Args either (player, action) or (action)."""
-    player = self.current_player() if arg1 is None else arg0
-    action = arg0 if arg1 is None else arg1
-    row, col = self.coord(action)
-    return "{}({},{})".format("x" if player == 0 else "o", row, col)
+  def action_to_string(self, player, action):
+    return self.action_to_string(action)
+
+  def action_to_string(self, action):
+    coord = self.coord(action)
+    return "{}({},{})".format("x" if self._cur_player == 0 else "y",
+                              coord[0], coord[1])
+
+  def string_to_action(self, player, string):
+    # This method is not used in many places, likely ok to leave out.
+    return self.string_to_action(string)
+
+  def string_to_action(self, string):
+    # This method is not used in many places, likely ok to leave out.
+    parts = string.replace("x", "").replace("y", "").replace("(", "").replace(
+        ")", "").split(",")
+    return self._rows * int(parts[0]) + int(parts[1])
 
   def is_terminal(self):
-    return self._is_terminal
+    return self._winner != _GAME_NOT_DONE
 
   def returns(self):
     if self.is_terminal():
       if self._winner == 0:
-        return [1.0, -1.0]
+        return [1, -1]
       elif self._winner == 1:
-        return [-1.0, 1.0]
-    return [0.0, 0.0]
+        return [-1, 1]
+    return [0, 0]
 
   def rewards(self):
     return self.returns()
@@ -190,24 +236,19 @@ class TicTacToeState(object):
     return str(self._history)
 
   def information_state_string(self, player=None):
-    del player  # Same information state for both players.
     return self.history_str()
 
   def information_state_tensor(self, player=None):
-    raise NotImplementedError
+    # TODO(author5): implement this method.
+    assert False, "Unimplemented"
+    return []
 
   def observation_string(self, player=None):
-    del player  # Same observation for both players.
     return str(self)
 
-  def observation_tensor(self, player=None):
-    del player  # Same observation for both players.
-    observation = np.zeros((1 + _NUM_PLAYERS, _NUM_ROWS, _NUM_COLS))
-    for row in range(_NUM_ROWS):
-      for col in range(_NUM_COLS):
-        index = ".ox".index(self._board[row, col])
-        observation[index, row, col] = 1.0
-    return list(observation.flatten())
+  def observation_tensor(self):
+    # TODO(author5): implement this method.
+    assert False, "Unimplemented"
 
   def child(self, action):
     cloned_state = self.clone()
@@ -215,13 +256,14 @@ class TicTacToeState(object):
     return cloned_state
 
   def apply_actions(self, actions):
-    raise NotImplementedError  # Only applies to simultaneous move games
+    # Only applies to simultaneous move games
+    pass
 
   def num_distinct_actions(self):
-    return _NUM_CELLS
+    return 9
 
   def num_players(self):
-    return _NUM_PLAYERS
+    return 2
 
   def chance_outcomes(self):
     return []
@@ -239,12 +281,17 @@ class TicTacToeState(object):
     return [self.clone()]
 
   def __str__(self):
-    return "\n".join("".join(row) for row in self._board)
+    board_str = ""
+    for row in range(self._rows):
+      for col in range(self._cols):
+        board_str += self.board(row, col)
+      board_str += "\n"
+    return board_str
 
   def clone(self):
     cloned_state = TicTacToeState(self._game)
-    cloned_state.set_state(self._cur_player, self._winner, self._is_terminal,
-                           self._history[:], np.array(self._board))
+    cloned_state.set_state(self._cur_player, self._winner, self._history[:],
+                           self._board[:])
     return cloned_state
 
 
@@ -266,7 +313,7 @@ class TicTacToeGame(object):
     return TicTacToeState(self)
 
   def num_distinct_actions(self):
-    return _NUM_CELLS
+    return 9
 
   def clone(self):
     return TicTacToeGame()
@@ -275,49 +322,54 @@ class TicTacToeGame(object):
     return 0
 
   def get_parameters(self):
-    return {}
+    # No parameters in TicTacToe
+    return pyspiel.Parameters()
 
   def num_players(self):
-    return _NUM_PLAYERS
+    return 2
 
   def min_utility(self):
-    return -1.0
+    return -1
 
   def max_utility(self):
-    return 1.0
+    return 1
 
   def get_type(self):
     return pyspiel.GameType(
-        short_name="python_tic_tac_toe",
-        long_name="Python Tic-Tac-Toe",
-        dynamics=pyspiel.GameType.Dynamics.SEQUENTIAL,
-        chance_mode=pyspiel.GameType.ChanceMode.DETERMINISTIC,
-        information=pyspiel.GameType.Information.PERFECT_INFORMATION,
-        utility=pyspiel.GameType.Utility.ZERO_SUM,
-        reward_model=pyspiel.GameType.RewardModel.TERMINAL,
-        max_num_players=_NUM_PLAYERS,
-        min_num_players=_NUM_PLAYERS,
-        provides_information_state_string=True,
-        provides_information_state_tensor=False,
-        provides_observation_string=True,
-        provides_observation_tensor=True,
-        parameter_specification={},
+        "python_tic_tac_toe",
+        "Python Tic-Tac-Toe",
+        pyspiel.GameType.Dynamics.SEQUENTIAL,
+        pyspiel.GameType.ChanceMode.DETERMINISTIC,
+        pyspiel.GameType.Information.PERFECT_INFORMATION,
+        pyspiel.GameType.Utility.ZERO_SUM,
+        pyspiel.GameType.RewardModel.TERMINAL,
+        2,  # max num players
+        2,  # min_num_players
+        True,  # provides_information_state
+        False,  # provides_information_state_tensor
+        True,  # provides_observation
+        False,  # provides_observation_tensor
+        {}  # parameter_specification
     )
 
   def utility_sum(self):
-    return 0.0
+    return 0
 
   def observation_tensor_shape(self):
-    return [1 + _NUM_PLAYERS, _NUM_ROWS, _NUM_COLS]
+    # Only define observation tensors for Tic-Tac-Toe
+    # TODO(author5): implement me
+    pass
 
   def observation_tensor_size(self):
-    return np.product(self.observation_tensor_shape())
+    # Only define observation tensors for Tic-Tac-Toe
+    # TODO(author5): implement me
+    pass
 
   def deserialize_state(self, string):
     return pickle.loads(string)
 
   def max_game_length(self):
-    return _NUM_CELLS
+    return 9
 
   def __str__(self):
     return "python_tic_tac_toe"

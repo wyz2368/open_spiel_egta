@@ -340,6 +340,7 @@ class GenPSROSolver(abstract_meta_trainer.AbstractMetaTrainer):
             current_player,
             self._meta_strategy_probabilities,
             rectify_training=self._rectify_training)
+        # print("type of policy:", type(new_policy))
         current_new_policies.append(new_policy)
       self._new_policies.append(current_new_policies)
 
