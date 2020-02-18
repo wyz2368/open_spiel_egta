@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Modular implementations of the PSRO meta algorithm.
+"""Modular implementations of the PSRO meta algorithm with reinforcement learning oracle.
 
 Allows the use of Restricted Nash Response, Nash Response, Uniform Response,
 and other modular matchmaking selection components users can add.
@@ -29,7 +29,6 @@ setting).
 3) Update meta game matrix with new game results.
 
 
-This is a costomized version by Strategic Reasoning Group of U-of-M.
 In this version, we combine RL with PSRO and initial strategies are uniform strategy.
 
 """
@@ -227,7 +226,7 @@ def empty_list_generator(number_dimensions):
 
 
 class GenEGTASolver(abstract_meta_trainer.AbstractMetaTrainer):
-  """A general implementation PSRO.
+  """A general implementation PSRO with reinforcement learning oracle.
 
   PSRO is the algorithm described in (Lanctot et Al., 2017,
   https://arxiv.org/pdf/1711.00832.pdf ).
@@ -251,6 +250,7 @@ class GenEGTASolver(abstract_meta_trainer.AbstractMetaTrainer):
                initial_policies=None,
                training_strategy_selector=None,
                meta_strategy_method=None,
+               symmetric=False,
                **kwargs):
     """Initialize the RNR solver.
 
@@ -286,12 +286,14 @@ class GenEGTASolver(abstract_meta_trainer.AbstractMetaTrainer):
                 games.
               - "prd": Projected Replicator Dynamics, as described in Lanctot et
                 Al.
+      symmetric: if the game is symmetric or not.
       **kwargs: kwargs for meta strategy computation and training strategy
         selection.
     """
     self._sims_per_entry = sims_per_entry
     self._session = session
     self.set_strategy_selection_method(training_strategy_selector)
+    self._symmetric = symmetric
     super(GenEGTASolver, self).__init__(game, oracle, initial_policies,
                                         meta_strategy_method, **kwargs)
 
@@ -326,12 +328,12 @@ class GenEGTASolver(abstract_meta_trainer.AbstractMetaTrainer):
       self._training_strategy_selector = training_strategy_selector
 
 
-    #TODO: test this function.
   def update_rl_agents(self):
       """Updates each agent using the RL oracle.
       Each player only adds one strategy at each PSRO iteration.
       Assume training_strategy_selector is 'probabilities'.
       """
+      #if the game is symmetric, then players share the same strategy set.
       self._new_policies = []
       for current_player in range(self._num_players):
           current_new_policies = []
@@ -341,7 +343,21 @@ class GenEGTASolver(abstract_meta_trainer.AbstractMetaTrainer):
               current_player,
               self._meta_strategy_probabilities)
           current_new_policies.append(new_policy)
+          if self._symmetric:
+              for current_player in range(self._num_players):
+                  self._new_policies.append(current_new_policies)
+              break
           self._new_policies.append(current_new_policies)
+
+  def iteration(self, seed=None):
+      """
+      Override the iteration function in the AbstractMetaTrainer.
+      :param seed: random seed.
+      """
+      self._iterations += 1
+      self.update_meta_strategies()  # Compute nash equilibrium.
+      self.update_rl_agents()  # Generate new, Best Response agents via oracle.
+      self.update_empirical_gamestate(seed=seed)  # Update gamestate matrix.
 
     #TODO: test this function.
   def rl_sample_episode(self, agents):
@@ -477,6 +493,3 @@ class GenEGTASolver(abstract_meta_trainer.AbstractMetaTrainer):
   @property
   def get_strategy_computation_and_selection_kwargs(self):
     return self._strategy_computation_and_selection_kwargs
-
-
-#TODO: consider symmetric case where the strategy set is shared.

@@ -53,7 +53,7 @@ class UniformAgent(Policy):
     """Initializes a uniform random policy for all players in the game."""
     all_players = list(range(game.num_players()))
     super(UniformAgent, self).__init__(game, all_players)
-    self._game = game
+    # self._game = game
     self.env = rl_environment.Environment(game)
 
   def action_probabilities(self, state, player_id=None):
@@ -79,3 +79,45 @@ class UniformAgent(Policy):
     action = np.random.choice(num_actions, p=probs)
 
     return rl_agent.StepOutput(action=action, probs=probs)
+
+
+class RLPolcy(Policy):
+  """
+  This class provides a wrapper for RL agent so that a RL agent can be passed to certain functions,
+  for example, a best response function.
+  """
+  #TODO: notice that the best response function cannot deal with mixed strategy.
+  def __init__(self,
+               game,
+               agent,
+               ):
+    all_players = list(range(game.num_players()))
+    super(RLPolcy, self).__init__(game, all_players)
+    self._agent = agent
+    self.env = rl_environment.Environment(game)
+
+  def state_to_info_state(self, state):
+    if self.game.get_type().provides_information_state_tensor:
+      self._use_observation = False
+    elif self.game.get_type().provides_observation_tensor:
+      self._use_observation = True
+    else:
+      raise ValueError("Game must provide either information state or "
+                       "observation as a normalized vector")
+
+    player_id = state.current_player()
+    if self._use_observation:
+      info_state = state.observation_tensor(player_id)
+    else:
+      info_state = state.information_state_tensor(player_id)
+
+    legal_actions = state.legal_actions(player_id)
+
+    return info_state, legal_actions
+
+
+  def action_probabilities(self, state, player_id=None):
+    info_state, legal_actions = self.state_to_info_state(state)
+    _, probs = self._agent._act(info_state, legal_actions)
+    actions = range(len(probs))
+    return dict(zip(actions,probs))

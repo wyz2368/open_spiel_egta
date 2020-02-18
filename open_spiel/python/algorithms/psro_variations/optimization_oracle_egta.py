@@ -8,23 +8,26 @@ import numpy as np
 from open_spiel.python.algorithms.psro_variations.optimization_oracle import AbstractOracle
 from open_spiel.python import rl_environment
 from open_spiel.python.algorithms import policy_gradient
+from open_spiel.python.algorithms import dqn
 # from open_spiel.python.algorithms.losses import rl_losses
 # import tensorflow.compat.v1 as tf
 
-#TODO: A global session is needed.
 class RLoracle(AbstractOracle):
     """Oracle using RL to compute BR to policies."""
     def __init__(self,
                  session,
+                 oracle='a2c',
                  number_episodes_sampled=100,
                  **kwargs):
         super(RLoracle, self).__init__(**kwargs)
 
         self._number_episodes_sampled = number_episodes_sampled
         self._session = session
+        self._oracle = oracle
 
     def probabilistic_strategy_selector(self, total_policies, probabilities_of_playing_policies):
-      """Returns [kwargs] policies randomly, proportionally with selection probas.
+      """
+      Returns [kwargs] policies randomly, proportionally with selection probas.
       """
       # By default, select only 1 new policy to optimize from.
       num_players = len(total_policies)
@@ -66,18 +69,30 @@ class RLoracle(AbstractOracle):
         num_actions = env.action_spec()["num_actions"]
 
         with self._session.as_default():
-          training_agent = policy_gradient.PolicyGradient(  # pylint: disable=g-complex-comprehension
-                self._session,
-                player_id=current_player,
-                info_state_size=info_state_size,
-                num_actions=num_actions,
-                loss_str="a2c",
-                hidden_layers_sizes=[8, 8],
-                batch_size=16,
-                entropy_cost=0.001,
-                critic_learning_rate=0.01,
-                pi_learning_rate=0.01,
-                num_critic_before_pi=4)
+          if self._oracle == "dqn":
+              training_agent = dqn.DQN(
+                    session=self._session,
+                    player_id=current_player,
+                    state_representation_size=info_state_size,
+                    num_actions=num_actions,
+                    hidden_layers_sizes=[64, 64],
+                    replay_buffer_capacity=1e5,
+                    batch_size=32)
+          elif self._oracle in ["rpg", "qpg", "rm", "a2c"]:
+              training_agent = policy_gradient.PolicyGradient(  # pylint: disable=g-complex-comprehension
+                    session=self._session,
+                    player_id=current_player,
+                    info_state_size=info_state_size,
+                    num_actions=num_actions,
+                    loss_str=self._oracle,
+                    hidden_layers_sizes=[8, 8],
+                    batch_size=16,
+                    entropy_cost=0.001,
+                    critic_learning_rate=0.01,
+                    pi_learning_rate=0.01,
+                    num_critic_before_pi=4)
+          else:
+              raise ValueError("Oracle selected is not supported.")
 
           #TODO: check all the players' id correct.
           for _ in range(self._number_episodes_sampled):
