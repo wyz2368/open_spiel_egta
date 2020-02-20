@@ -1,3 +1,4 @@
+import pyspiel
 from open_spiel.python.algorithms.psro_variations.nash_solver import general_nash_solver as gs
 
 import numpy as np
@@ -24,7 +25,7 @@ BC_p2_meta_game = np.array([[[-1, 1],[2, 1]], [[2, 1], [0, 1]]])
 BC_p3_meta_game = np.array([[[-1, 2],[2, 0]], [[1, 1], [1, 1]]])
 BC_meta_games = [BC_p1_meta_game, BC_p2_meta_game, BC_p3_meta_game]
 
-game_name = 'BOS'
+game_name = 'MP'
 
 if game_name == 'MP':
     meta_games = MP_meta_games
@@ -35,6 +36,7 @@ elif game_name == 'BC':
 else:
     raise ValueError("Game does not exist.")
 
-equilibria = gs.nash_solver(meta_games, solver="gambit", mode='all')
+#equilibria = gs.nash_solver(meta_games, solver="gambit", mode='all')
+equilibria = gs.nash_solver(meta_games,solver="lrsnash",lrsnash_path='./lrsnash')
 for eq in equilibria:
     print(eq)

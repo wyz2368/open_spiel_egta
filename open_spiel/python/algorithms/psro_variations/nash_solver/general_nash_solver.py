@@ -81,6 +81,7 @@ def lrs_solve(row_payoffs, col_payoffs, lrsnash_path):
             game_file.write(" ".join(_to_fraction_str(col_payoffs[row])) + "\n")
         game_file.write("\n")
         game_file.close()
+
         lrs = subprocess.Popen(
             [lrsnash_path or "lrsnash", "-s", game_file_path],
             stdin=subprocess.PIPE,
@@ -175,7 +176,7 @@ def pure_ne_solve(meta_games, tol=1e-7):
     return pure_ne
 
 def nash_solver(meta_games,
-                solver="nashpy",
+                solver,#="nashpy",
                 mode="one",
                 lrsnash_path=None):
     """

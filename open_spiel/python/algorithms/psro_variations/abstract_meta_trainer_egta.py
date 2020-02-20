@@ -120,7 +120,7 @@ def general_nash_strategy(solver):
   :return: Nash distribution on strategies.
   """
   meta_games = solver.get_meta_game
-  equilibria = general_nash_solver.nash_solver(meta_games)
+  equilibria = general_nash_solver.nash_solver(meta_games,solver='lrsnash',lrsnash_path='./nash_solver/lrsnash')
   return equilibria
 
 

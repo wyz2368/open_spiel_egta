@@ -40,7 +40,7 @@ from __future__ import print_function
 import itertools
 import numpy as np
 
-from open_spiel.python.algorithms.psro_variations import abstract_meta_trainer
+from open_spiel.python.algorithms.psro_variations import abstract_meta_trainer_egta
 from open_spiel.python.policy_egta import UniformAgent
 from open_spiel.python import rl_environment
 
@@ -225,7 +225,7 @@ def empty_list_generator(number_dimensions):
   return result
 
 
-class GenEGTASolver(abstract_meta_trainer.AbstractMetaTrainer):
+class GenEGTASolver(abstract_meta_trainer_egta.AbstractMetaTrainer):
   """A general implementation PSRO with reinforcement learning oracle.
 
   PSRO is the algorithm described in (Lanctot et Al., 2017,
@@ -327,8 +327,7 @@ class GenEGTASolver(abstract_meta_trainer.AbstractMetaTrainer):
       # We infer the argument passed is a callable function.
       self._training_strategy_selector = training_strategy_selector
 
-
-  def update_rl_agents(self):
+  def update_rl_agents(self,iter):
       """Updates each agent using the RL oracle.
       Each player only adds one strategy at each PSRO iteration.
       Assume training_strategy_selector is 'probabilities'.
@@ -339,6 +338,7 @@ class GenEGTASolver(abstract_meta_trainer.AbstractMetaTrainer):
           current_new_policies = []
           new_policy = self._oracle(
               self._game,
+              iter,
               self._policies,
               current_player,
               self._meta_strategy_probabilities)
@@ -349,14 +349,15 @@ class GenEGTASolver(abstract_meta_trainer.AbstractMetaTrainer):
               break
           self._new_policies.append(current_new_policies)
 
-  def iteration(self, seed=None):
+  def iteration(self, iter,seed=None):
       """
       Override the iteration function in the AbstractMetaTrainer.
       :param seed: random seed.
+      :param iter: current number of iteration
       """
       self._iterations += 1
       self.update_meta_strategies()  # Compute nash equilibrium.
-      self.update_rl_agents()  # Generate new, Best Response agents via oracle.
+      self.update_rl_agents(iter)  # Generate new, Best Response agents via oracle.
       self.update_empirical_gamestate(seed=seed)  # Update gamestate matrix.
 
     #TODO: test this function.
