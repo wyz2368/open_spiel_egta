@@ -80,23 +80,24 @@ class UniformAgent(Policy):
 
     return rl_agent.StepOutput(action=action, probs=probs)
 
-
-class RLPolcy(Policy):
+class RLPolicy(Policy):
   """
-  This class provides a wrapper for RL agent so that a RL agent can be passed to certain functions,
-  for example, a best response function.
+  This class provides a wrapper for multiple RL agents for multiple players in a game to be aggregated into one policy, and then passed into a certain functions,
+  for example, a _state_values function or a nash_conv functions.
+  It aggregates all policies for all players, instead of just one below.
   """
-  #TODO: notice that the best response function cannot deal with mixed strategy.
   def __init__(self,
                game,
-               agent,
+               agents
                ):
-    all_players = list(range(game.num_players()))
-    super(RLPolcy, self).__init__(game, all_players)
-    self._agent = agent
+    num_players = game.num_players()
+    assert len(agents)==num_players,"number of players should equal number of RL policies"
+    all_players = list(range(num_players))
+    super(RLPolicy,self).__init__(game,all_players)
+    self._agents = agents
     self.env = rl_environment.Environment(game)
 
-  def state_to_info_state(self, state):
+  def state_to_info_state(self, state, player_id=None):
     if self.game.get_type().provides_information_state_tensor:
       self._use_observation = False
     elif self.game.get_type().provides_observation_tensor:
@@ -105,7 +106,7 @@ class RLPolcy(Policy):
       raise ValueError("Game must provide either information state or "
                        "observation as a normalized vector")
 
-    player_id = state.current_player()
+    player_id = player_id or state.current_player()
     if self._use_observation:
       info_state = state.observation_tensor(player_id)
     else:
@@ -113,11 +114,62 @@ class RLPolcy(Policy):
 
     legal_actions = state.legal_actions(player_id)
 
-    return info_state, legal_actions
-
+    return player_id, info_state, legal_actions
 
   def action_probabilities(self, state, player_id=None):
-    info_state, legal_actions = self.state_to_info_state(state)
-    _, probs = self._agent._act(info_state, legal_actions)
+    """
+    player_id optional unless it is a simultaneous state at which multiple players can act
+    """
+    if state.is_simultaneous_node():
+      assert player_id is not None,'simultaneous move requires player id'
+    player_id, info_state, legal_actions = self.state_to_info_state(state,player_id)
+
+    _, probs = self._agents[player_id]._act(info_state, legal_actions)
     actions = range(len(probs))
     return dict(zip(actions,probs))
+
+  #TODO: copy with noise, peturb the weights and biases of nn
+  def copy_with_noise(self,**noise_kwargs):
+
+    raise NotImplementedError()
+  
+#class RLPolicy(Policy):
+#  """
+#  This class provides a wrapper for RL agent so that a RL agent can be passed to certain functions,
+#  for example, a best response function.
+#  """
+#  #TODO: notice that the best response function cannot deal with mixed strategy.
+#  def __init__(self,
+#               game,
+#               agent,
+#e              ):
+#    all_players = list(range(game.num_players()))
+#    super(RLPolicy, self).__init__(game, all_players)
+#    self._agent = agent
+#    self.env = rl_environment.Environment(game)
+#
+#  def state_to_info_state(self, state):
+#    if self.game.get_type().provides_information_state_tensor:
+#      self._use_observation = False
+#    elif self.game.get_type().provides_observation_tensor:
+#      self._use_observation = True
+#    else:
+#      raise ValueError("Game must provide either information state or "
+#                       "observation as a normalized vector")
+#
+#    player_id = state.current_player()
+#    if self._use_observation:
+#      info_state = state.observation_tensor(player_id)
+#    else:
+#      info_state = state.information_state_tensor(player_id)
+#
+#    legal_actions = state.legal_actions(player_id)
+#
+#    return info_state, legal_actions
+#
+#
+#  def action_probabilities(self, state, player_id=None):
+#    info_state, legal_actions = self.state_to_info_state(state)
+#    _, probs = self._agent._act(info_state, legal_actions)
+#    actions = range(len(probs))
+#    return dict(zip(actions,probs))

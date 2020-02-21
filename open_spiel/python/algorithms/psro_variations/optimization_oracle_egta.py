@@ -5,6 +5,7 @@ from __future__ import print_function
 import pyspiel
 import numpy as np
 from tqdm import tqdm
+import sys
 # from open_spiel.python.algorithms.psro_variations import abstract_meta_trainer
 import tensorflow.compat.v1 as tf
 from open_spiel.python.algorithms.psro_variations.optimization_oracle import AbstractOracle
@@ -27,7 +28,6 @@ class RLoracle(AbstractOracle):
         self._session = session
         self._oracle = oracle
         self._checkpoint_dir = checkpoint_dir
-        self.summary_writer = tf.summary.FileWriter(checkpoint_dir+"/training_progress_log")
 
     def probabilistic_strategy_selector(self, total_policies, probabilities_of_playing_policies):
       """
@@ -104,8 +104,10 @@ class RLoracle(AbstractOracle):
           for var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=scope_name):
             var.initializer.run()
 
+          episodes_rewards = []
+          avg_rewards = []
           #TODO: check all the players' id correct.
-          for ep in tqdm(range(self._number_episodes_sampled)):
+          for ep in tqdm(range(self._number_episodes_sampled), file=sys.stdout):
 
             agents = self.probabilistic_strategy_selector(total_policies, probabilities_of_playing_policies)
             episode_reward = 0
@@ -134,13 +136,11 @@ class RLoracle(AbstractOracle):
               
             # Episode is over, step the agent under training with final info state, log episode reward
             training_agent.step(time_step)
-            summary = tf.Summary()
-            summary.value.add(tag=scope_name,simple_value=episode_reward)
-            self.summary_writer.add_summary(summary,ep)
 
-          self.summary_writer.flush()
+            episodes_rewards.append(episode_reward)
+            avg_rewards.append(sum(episodes_rewards[ep-100:ep])/100 if ep>99 else sum(episodes_rewards)/len(episodes_rewards))
 
           if self._checkpoint_dir:
             saver.save(self._session,self._checkpoint_dir+'/'+scope_name)
 
-        return training_agent
+        return training_agent,avg_rewards

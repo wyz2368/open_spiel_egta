@@ -41,7 +41,8 @@ import itertools
 import numpy as np
 
 from open_spiel.python.algorithms.psro_variations import abstract_meta_trainer_egta
-from open_spiel.python.policy_egta import UniformAgent
+from open_spiel.python.algorithms import exploitability
+from open_spiel.python.policy_egta import UniformAgent,RLPolicy
 from open_spiel.python import rl_environment
 
 # Constant, specifying the threshold below which probabilities are considered
@@ -334,22 +335,39 @@ class GenEGTASolver(abstract_meta_trainer_egta.AbstractMetaTrainer):
       """
       #if the game is symmetric, then players share the same strategy set.
       self._new_policies = []
+      training_curves = []
       for current_player in range(self._num_players):
           current_new_policies = []
-          new_policy = self._oracle(
+          new_policy,training_curve = self._oracle(
               self._game,
               iter,
               self._policies,
               current_player,
-              self._meta_strategy_probabilities)
+              self._meta_strategy_probabilities
+              )
           current_new_policies.append(new_policy)
+          training_curves.append(training_curve)
           if self._symmetric:
               for current_player in range(self._num_players):
                   self._new_policies.append(current_new_policies)
               break
           self._new_policies.append(current_new_policies)
+      return {'train_iter'+str(iter)+'_p'+str(i):training_curves[i] for i in range(len(training_curves))}
 
-  def iteration(self, iter,seed=None):
+  def evaluate_iteration(self):
+      """
+      compute evaluation metrics of current iteration
+      """
+      metrics = {'nashconv':0}
+      policy = [item[0] for item in self._new_policies]
+      rl_policy = RLPolicy(self._game,policy) 
+      metrics['nashconv'] = exploitability.nash_conv(self._game,rl_policy)
+      return metrics
+
+  def iteration(self, 
+                iter,
+                seed=None
+                ):
       """
       Override the iteration function in the AbstractMetaTrainer.
       :param seed: random seed.
@@ -357,8 +375,11 @@ class GenEGTASolver(abstract_meta_trainer_egta.AbstractMetaTrainer):
       """
       self._iterations += 1
       self.update_meta_strategies()  # Compute nash equilibrium.
-      self.update_rl_agents(iter)  # Generate new, Best Response agents via oracle.
+      train_dict = self.update_rl_agents(iter)  # Generate new, Best Response agents via oracle.
       self.update_empirical_gamestate(seed=seed)  # Update gamestate matrix.
+      eval_dict = self.evaluate_iteration() # evaluate iteration using nashconv or combined game
+      eval_dict.update(train_dict)
+      return eval_dict
 
     #TODO: test this function.
   def rl_sample_episode(self, agents):
