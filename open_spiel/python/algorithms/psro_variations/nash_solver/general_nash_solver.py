@@ -87,9 +87,11 @@ def lrs_solve(row_payoffs, col_payoffs, lrsnash_path):
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT)
+
+        lrs_result = lrs.communicate()[0]
         equilibria = []
         col_mixtures = []
-        for line in lrs.stdout:
+        for line in lrs_result.split(b'\n'):
             if len(line) <= 1 or line[:1] == b"*":
                 continue
             line = np.asfarray([fractions.Fraction(x) for x in line.decode().split()])
@@ -130,6 +132,7 @@ def lemke_howson_solve(row_payoffs, col_payoffs):
         for row_mixture, col_mixture in nashpy.Game(
                 row_payoffs, col_payoffs).lemke_howson_enumeration():
             if warned_degenerate[0]:
+                print('wrong results')
                 # attempt to discard obviously-wrong results
                 if (row_mixture.shape != row_payoffs.shape[:1] or
                         col_mixture.shape != row_payoffs.shape[1:]):
@@ -143,14 +146,14 @@ def lemke_howson_solve(row_payoffs, col_payoffs):
     finally:
         warnings.showwarning = showwarning
 
-def gambit_solve(meta_games, mode):
+def gambit_solve(meta_games, mode, gambit_path):
     """
     Find NE using gambit.
     :param meta_games: meta-games in PSRO.
     :param mode: options "all", "one", "pure"
     :return: a list of NE.
     """
-    return do_gambit_analysis(meta_games, mode)
+    return do_gambit_analysis(meta_games, mode, gambit_path=gambit_path)
 
 def pure_ne_solve(meta_games, tol=1e-7):
     """
@@ -178,6 +181,7 @@ def pure_ne_solve(meta_games, tol=1e-7):
 def nash_solver(meta_games,
                 solver,#="nashpy",
                 mode="one",
+                gambit_path=None,
                 lrsnash_path=None):
     """
     Solver for NE.
@@ -186,10 +190,13 @@ def nash_solver(meta_games,
     :param mode: options "all", "one", "pure"
     :param lrsnash_path: path to lrsnash solver.
     :return: a list of NE.
+    WARNING:
+    opening up a subprocess in every iteration eventually
+    leads the os to block the subprocess. Not usable.
     """
     num_players = len(meta_games)
     if solver == "gambit" or num_players > 2:
-        return gambit_solve(meta_games, mode)
+        return gambit_solve(meta_games, mode, gambit_path)
     else:
         assert num_players == 2
 
@@ -227,8 +234,17 @@ def nash_solver(meta_games,
         try:
             equilibria = itertools.chain([next(equilibria)], equilibria)
         except StopIteration:
-            logging.info("No equilibrium has been found!")
-
+            logging.warning("degenerate game!")
+#            pklfile = open('/home/qmaai/degenerate_game.pkl','wb')
+#            pickle.dump([row_payoffs,col_payoffs],pklfile)
+#            pklfile.close()
+            # degenerate game apply support enumeration
+            equilibria = nashpy.Game(row_payoffs, col_payoffs).support_enumeration()
+            try:
+                equilibria = itertools.chain([next(equilibria)], equilibria)
+            except StopIteration:
+                logging.warning("no equilibrium!")
+        
         equilibria = list(equilibria)
         if mode == 'all':
             return equilibria
@@ -237,4 +253,10 @@ def nash_solver(meta_games,
         else:
             raise ValueError("Please choose a valid mode.")
 
-
+def normalize_ne(eq):
+    for p in range(len(eq)):
+      np_eq = np.array(eq[p])
+      np_eq[np_eq<0] = 0
+      np_eq /= sum(np_eq)
+      eq[p] = np_eq.tolist()
+    return eq

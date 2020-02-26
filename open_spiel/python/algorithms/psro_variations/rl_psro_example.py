@@ -8,6 +8,7 @@ from __future__ import print_function
 # warnings.filterwarnings("ignore")
 
 import os
+import re
 import datetime
 from absl import app
 import sys
@@ -24,30 +25,40 @@ logging.set_verbosity(logging.WARNING)
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string("game", "kuhn_poker", "Name of the game.")
-flags.DEFINE_integer("sims_per_entry", 5,
+flags.DEFINE_integer("sims_per_entry", 30,
                      "Number of simulations to update meta game matrix.")
-flags.DEFINE_integer("psro_iterations", 5, "Number of iterations.")
+flags.DEFINE_integer("psro_iterations", 150, "Number of iterations.")
 flags.DEFINE_integer(
-    "number_episodes_sampled", int(5e2),
+    "number_episodes_sampled", int(5e5),
     "Number of episodes per policy sampled for value estimation.")
 flags.DEFINE_string("oracle","a2c","type of rl algorithm to use for oracle")
 flags.DEFINE_string("root_result_folder",'root_result',"root directory of saved results")
 flags.DEFINE_boolean("record_train",True,'record training curve of each player, each iteration')
+flags.DEFINE_string("load_folder","","folder for load policy: the number of iteration will be determined")
+flags.DEFINE_string("nash_solver_path","/home/qmaai/gambit/bin/","lrsnash executable filepath or bin folder for gambit")
 
 def main(unused_argv):
-
-  if not os.path.exists(FLAGS.root_result_folder):
-    os.makedirs(FLAGS.root_result_folder)
-
-  checkpoint_dir = os.path.join(os.getcwd(),FLAGS.root_result_folder,FLAGS.game+'_'+FLAGS.oracle+'_sims_'+str(FLAGS.sims_per_entry)+'_it'+str(FLAGS.psro_iterations)+'_ep'+str(FLAGS.number_episodes_sampled)+'_'+datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
-  os.makedirs(checkpoint_dir)
-  sys.stdout = open(checkpoint_dir+'/stdout.txt','w')
+  begin_iter = 0
+  if FLAGS.load_folder!='':
+      os.path.exists(FLAGS.load_folder)
+      checkpoint_dir = FLAGS.load_folder
+      # get last iteration number from filename
+      for filename in os.listdir(checkpoint_dir):
+          if 'iter' in filename:
+              begin_iter = max(begin_iter,int(re.search(r'\d+',filename).group()))
+  else:
+      if not os.path.exists(FLAGS.root_result_folder):
+          os.makedirs(FLAGS.root_result_folder)
+      checkpoint_dir = os.path.join(os.getcwd(),FLAGS.root_result_folder,FLAGS.game+'_'+FLAGS.oracle+'_sims_'+str(FLAGS.sims_per_entry)+'_it'+str(FLAGS.psro_iterations)+'_ep'+str(FLAGS.number_episodes_sampled)+'_'+datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
+      os.makedirs(checkpoint_dir)
+  sys.stdout = open(checkpoint_dir+'/stdout.txt','a+')
 
   game = pyspiel.load_game(FLAGS.game)
 
   global_sess = tf.Session()
 
   oracle = optimization_oracle_egta.RLoracle(
+      game = game,
       session=global_sess,
       number_episodes_sampled=FLAGS.number_episodes_sampled,
       checkpoint_dir=checkpoint_dir)
@@ -56,18 +67,23 @@ def main(unused_argv):
       game=game,
       oracle=oracle,
       session=global_sess,
-      sims_per_entry=FLAGS.sims_per_entry)
+      sims_per_entry=FLAGS.sims_per_entry,
+      nash_solver_path=FLAGS.nash_solver_path)
+  
+  if FLAGS.load_folder!='':
+    rl_solver.load(begin_iter,checkpoint_dir,checkpoint_dir+'/attr.pkl')
   
   #import warnings
   #warnings.simplefilter('error')
   writer = SummaryWriter(logdir=checkpoint_dir+'/log')
-  for iter in range(FLAGS.psro_iterations):
+  for iter in range(begin_iter+1,FLAGS.psro_iterations):
     result_dict = rl_solver.iteration(iter=iter)
+    rl_solver.save_attr(iter,checkpoint_dir+'/attr.pkl')
     nash_probabilities = rl_solver.get_and_update_meta_strategies()
     print("{} / {}".format(iter + 1, FLAGS.psro_iterations))
     for ele in nash_probabilities:
       print(ele)
-    
+     
     for key,val in result_dict.items():
       # train: each episode during an iter of episodes
       if 'train' in key:

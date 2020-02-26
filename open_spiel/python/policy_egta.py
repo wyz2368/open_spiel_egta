@@ -63,6 +63,11 @@ class UniformAgent(Policy):
     probability = 1 / len(legal_actions)
     return {action: probability for action in legal_actions}
 
+  def _act(self,info_state,legal_actions):
+    probs = [1/len(legal_actions) for _ in range(len(legal_actions))]
+    action = np.random.choice(len(probs),p=probs)
+    return action, probs
+
   def step(self, time_step, **kargs):
     player_id = time_step.observations["current_player"]
     legal_actions = time_step.observations["legal_actions"][player_id]

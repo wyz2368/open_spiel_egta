@@ -109,7 +109,7 @@ def nash_strategy(solver):
   ]
 
 # NEW
-def general_nash_strategy(solver):
+def general_nash_strategy(solver,solver_path):
   """
   Returns nash distribution on meta game matrix.
   This method works for general-sum many-player games. Details see nash_solver directory.
@@ -118,9 +118,14 @@ def general_nash_strategy(solver):
 
   :param solver: GenPSROSolver instance.
   :return: Nash distribution on strategies.
+  WARNING:
+  Nashpy, mode='all' is the only safe option for two player game.
+  As lemke_howson_solve fails in degenerate game
+  lrs_nash open a subprocess every iteration and eventually is blocked by os
   """
   meta_games = solver.get_meta_game
-  equilibria = general_nash_solver.nash_solver(meta_games,solver='lrsnash',lrsnash_path='./nash_solver/lrsnash')
+  equilibria = general_nash_solver.nash_solver(meta_games,solver='gambit',mode='one',gambit_path=solver_path)
+  equilibria = general_nash_solver.normalize_ne(equilibria)
   return equilibria
 
 
@@ -249,10 +254,10 @@ class AbstractMetaTrainer(object):
     self.update_agents()  # Generate new, Best Response agents via oracle.
     self.update_empirical_gamestate(seed=seed)  # Update gamestate matrix.
 
-  def update_meta_strategies(self):
+  def update_meta_strategies(self,solver_path):
     if self._meta_method_varying:
         self.update_meta_method()
-    self._meta_strategy_probabilities = self._meta_strategy_method(self)
+    self._meta_strategy_probabilities = self._meta_strategy_method(self,solver_path)
 
   def update_agents(self):
     return NotImplementedError("update_agents not implemented.")

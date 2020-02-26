@@ -39,6 +39,8 @@ from __future__ import print_function
 
 import itertools
 import numpy as np
+import itertools
+import pickle
 
 from open_spiel.python.algorithms.psro_variations import abstract_meta_trainer_egta
 from open_spiel.python.algorithms import exploitability
@@ -250,7 +252,7 @@ class GenEGTASolver(abstract_meta_trainer_egta.AbstractMetaTrainer):
                sims_per_entry,
                initial_policies=None,
                training_strategy_selector=None,
-               meta_strategy_method=None,
+               meta_strategy_method='nash',
                symmetric=False,
                **kwargs):
     """Initialize the RNR solver.
@@ -294,9 +296,13 @@ class GenEGTASolver(abstract_meta_trainer_egta.AbstractMetaTrainer):
     self._sims_per_entry = sims_per_entry
     self._session = session
     self.set_strategy_selection_method(training_strategy_selector)
+    self._meta_strategy_str = meta_strategy_method
+    self._nash_solver_path = kwargs['nash_solver_path'] or None
+    self._nash_conv = {}
     self._symmetric = symmetric
     super(GenEGTASolver, self).__init__(game, oracle, initial_policies,
                                         meta_strategy_method, **kwargs)
+    
 
   def _initialize_policy(self, initial_policies):
     self._policies = [[] for k in range(self._num_players)]
@@ -316,7 +322,45 @@ class GenEGTASolver(abstract_meta_trainer_egta.AbstractMetaTrainer):
         np.array(empty_list_generator(self._num_players))
         for _ in range(self._num_players)
     ]
+
     self.update_empirical_gamestate(seed=None)
+
+  def load(iter,checkpoint_dir,attr_file=None):
+    """
+    Load previous training results
+    Params  :
+    iter          : number of iter to start from
+    checkpoint_dir: directory for tf graphs to be stored
+    attr_file     : stores self._meta_games, self._nash_conv
+    """
+    self._policies = self._oracle.load(it,checkpoint_dir)
+    if attr_file is not None:
+      pklfile = open(attr_file,'rb')
+      data = pickle.load(pklfile)
+      self._meta_games = data[0]
+      self._nash_conv = data[1]
+      pklfile.close()
+    else:
+      self._fill_meta_games()
+     
+  def _fill_meta_games(self):
+    # fill in meta game matrix, nash conv matrix is automatically filled
+    num_of_policy = len(self._policies[0])
+    self._meta_games = [
+        np.ones([num_of_policy for _ in range(self._num_players)])*np.infty for _ in range(self._num_players)
+    ]
+    iter_ind = itertools.product(list(range(num_of_policy)),repeat=self._num_players)
+    for ind in iter_ind:
+        pol = [self._policies[i][ind[i]] for i in range(self._num_players)]
+        self._meta_games[ind] = self.rl_sample_episodes(pol, self._sims_per_entry)
+  
+  def save_attr(self,iter,attr_file):
+    """
+    Save attributes: self._meta_games,self._nash_conv
+    """
+    pklfile = open(attr_file,'wb')
+    pickle.dump([self._meta_games,self._nash_conv],pklfile)
+    pklfile.close()
 
   def set_strategy_selection_method(self, training_strategy_selector):
     training_strategy_selector = training_strategy_selector or DEFAULT_STRATEGY_SELECTION_METHOD
@@ -327,6 +371,14 @@ class GenEGTASolver(abstract_meta_trainer_egta.AbstractMetaTrainer):
     else:
       # We infer the argument passed is a callable function.
       self._training_strategy_selector = training_strategy_selector
+
+  def update_meta_strategies(self):
+      """Prevent double computation of nash probability
+      """
+      if self._meta_strategy_str=='nash' and hasattr(self,'_nash_prob'):
+          self._meta_strategy_probabilities = self._nash_prob
+      else:
+          super(GenEGTASolver, self).update_meta_strategies(self._nash_solver_path)
 
   def update_rl_agents(self,iter):
       """Updates each agent using the RL oracle.
@@ -339,7 +391,6 @@ class GenEGTASolver(abstract_meta_trainer_egta.AbstractMetaTrainer):
       for current_player in range(self._num_players):
           current_new_policies = []
           new_policy,training_curve = self._oracle(
-              self._game,
               iter,
               self._policies,
               current_player,
@@ -354,14 +405,35 @@ class GenEGTASolver(abstract_meta_trainer_egta.AbstractMetaTrainer):
           self._new_policies.append(current_new_policies)
       return {'train_iter'+str(iter)+'_p'+str(i):training_curves[i] for i in range(len(training_curves))}
 
+  def evaluate_nash_conv(self):
+      """
+      evaluate nash conv for the current nash equilibrium
+      First compute NE of current empirical_game
+      Then fill in missing entry of nash conv value for pure strategy
+      Finally calculate nash conv of mixed strategy
+      self._nash_prob    : [[],[]] 2 dimensional list
+      ne_support         : [[],[]] 2 dimensional list, nash support policy index
+      ind                : (,,) index of pure strategy profile, length num_of_player
+      """
+      nash_conv_mixed = 0
+      self._nash_prob = abstract_meta_trainer_egta.general_nash_strategy(self,self._nash_solver_path)
+      num_of_policy = len(self._nash_prob[0])
+      ne_support =  [[i for i in range(num_of_policy) if ele[i]!=0] for ele in self._nash_prob]
+      for ind in itertools.product(*ne_support):
+          ne_prob = np.prod([self._nash_prob[i][ind[i]] for i in range(self._num_players)])
+          if ind not in self._nash_conv.keys():
+              policy = [self._policies[i][ind[i]] for i in range(self._num_players)]
+              rl_policy = RLPolicy(self._game,policy)
+              self._nash_conv[ind] = exploitability.nash_conv(self._game,rl_policy)
+          nash_conv_mixed += self._nash_conv[ind]*ne_prob
+      return nash_conv_mixed
+
   def evaluate_iteration(self):
       """
       compute evaluation metrics of current iteration
       """
       metrics = {'nashconv':0}
-      policy = [item[0] for item in self._new_policies]
-      rl_policy = RLPolicy(self._game,policy) 
-      metrics['nashconv'] = exploitability.nash_conv(self._game,rl_policy)
+      metrics['nashconv'] = self.evaluate_nash_conv()
       return metrics
 
   def iteration(self, 
@@ -429,6 +501,7 @@ class GenEGTASolver(abstract_meta_trainer_egta.AbstractMetaTrainer):
 
   def update_empirical_gamestate(self, seed=None):
     """Given new agents in _new_policies, update meta_games through simulations.
+    In the meanwhile, update nashconv matrix
 
     Args:
       seed: Seed for environment generation.
@@ -515,3 +588,7 @@ class GenEGTASolver(abstract_meta_trainer_egta.AbstractMetaTrainer):
   @property
   def get_strategy_computation_and_selection_kwargs(self):
     return self._strategy_computation_and_selection_kwargs
+
+  def get_nash_conv(self):
+    """Returns the nash conv matrix."""
+    return self._nash_conv
