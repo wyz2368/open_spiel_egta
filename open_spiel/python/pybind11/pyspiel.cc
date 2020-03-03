@@ -18,6 +18,7 @@
 #include "open_spiel/algorithms/best_response.h"
 #include "open_spiel/algorithms/cfr.h"
 #include "open_spiel/algorithms/cfr_br.h"
+#include "open_spiel/algorithms/deterministic_policy.h"
 #include "open_spiel/algorithms/evaluate_bots.h"
 #include "open_spiel/algorithms/expected_returns.h"
 #include "open_spiel/algorithms/matrix_game_utils.h"
@@ -27,6 +28,7 @@
 #include "open_spiel/algorithms/trajectories.h"
 #include "open_spiel/game_transforms/normal_form_extensive_game.h"
 #include "open_spiel/game_transforms/turn_based_simultaneous_game.h"
+#include "open_spiel/games/efg_game.h"
 #include "open_spiel/matrix_game.h"
 #include "open_spiel/normal_form_game.h"
 #include "open_spiel/policy.h"
@@ -235,6 +237,7 @@ PYBIND11_MODULE(pyspiel, m) {
                     &GameType::provides_observation_tensor)
       .def_readonly("parameter_specification",
                     &GameType::parameter_specification)
+      .def_readonly("default_loadable", &GameType::default_loadable)
       .def("__repr__", [](const GameType& gt) {
         return "<GameType '" + gt.short_name + "'>";
       });
@@ -271,6 +274,10 @@ PYBIND11_MODULE(pyspiel, m) {
       .value("SIMULTANEOUS", open_spiel::kSimultaneousPlayerId);
 
   m.attr("INVALID_ACTION") = py::int_(open_spiel::kInvalidAction);
+
+  py::enum_<open_spiel::TensorLayout>(m, "TensorLayout")
+      .value("HWC", open_spiel::TensorLayout::kHWC)
+      .value("CHW", open_spiel::TensorLayout::kCHW);
 
   py::class_<State> state(m, "State");
   state.def("current_player", &State::CurrentPlayer)
@@ -353,14 +360,20 @@ PYBIND11_MODULE(pyspiel, m) {
       .def("get_type", &Game::GetType)
       .def("utility_sum", &Game::UtilitySum)
       .def("information_state_tensor_shape", &Game::InformationStateTensorShape)
+      .def("information_state_tensor_layout",
+           &Game::InformationStateTensorLayout)
       .def("information_state_tensor_size", &Game::InformationStateTensorSize)
       .def("observation_tensor_shape", &Game::ObservationTensorShape)
+      .def("observation_tensor_layout", &Game::ObservationTensorLayout)
       .def("observation_tensor_size", &Game::ObservationTensorSize)
+      .def("policy_tensor_shape", &Game::PolicyTensorShape)
       .def("deserialize_state", &Game::DeserializeState)
       .def("max_game_length", &Game::MaxGameLength)
       .def("__str__", &Game::ToString)
-      .def("__eq__", [](const Game& value, Game* value2) {
-        return value2 && value.ToString() == value2->ToString(); })
+      .def("__eq__",
+           [](const Game& value, Game* value2) {
+             return value2 && value.ToString() == value2->ToString();
+           })
       .def(py::pickle(                            // Pickle support
           [](std::shared_ptr<const Game> game) {  // __getstate__
             return game->ToString();
@@ -644,6 +657,13 @@ PYBIND11_MODULE(pyspiel, m) {
   m.def("load_tensor_game", open_spiel::algorithms::LoadTensorGame,
         "Loads a game as a tensor game (will fail if not a tensor game.");
 
+  m.def("load_efg_game", open_spiel::efg_game::LoadEFGGame,
+        "Load a gambit extensive form game from data.");
+  m.def("get_sample_efg_data", open_spiel::efg_game::GetSampleEFGData,
+        "Get Kuhn poker EFG data.");
+  m.def("get_kuhn_poker_efg_data", open_spiel::efg_game::GetKuhnPokerEFGData,
+        "Get sample EFG data.");
+
   m.def("extensive_to_matrix_game",
         open_spiel::algorithms::ExtensiveToMatrixGame,
         "Converts a two-player extensive-game to its equivalent matrix game, "
@@ -720,6 +740,11 @@ PYBIND11_MODULE(pyspiel, m) {
 
   m.def("convert_to_turn_based", open_spiel::ConvertToTurnBased,
         "Returns a turn-based version of the given game.");
+
+  m.def("num_deterministic_policies",
+        open_spiel::algorithms::NumDeterministicPolicies,
+        "Returns number of determinstic policies in this game for a player, "
+        "or -1 if there are more than 2^64 - 1 policies.");
 
   m.def("expected_returns",
         py::overload_cast<const State&, const std::vector<const Policy*>&, int,

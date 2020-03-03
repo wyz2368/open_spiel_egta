@@ -315,6 +315,9 @@ class TicTacToeGame(object):
   def num_distinct_actions(self):
     return 9
 
+  def policy_tensor_shape(self):
+    return (_NUM_ROWS, _NUM_COLS, 1)
+
   def clone(self):
     return TicTacToeGame()
 
@@ -359,6 +362,9 @@ class TicTacToeGame(object):
     # Only define observation tensors for Tic-Tac-Toe
     # TODO(author5): implement me
     pass
+
+  def observation_tensor_layout(self):
+    return pyspiel.TensorLayout.CHW
 
   def observation_tensor_size(self):
     # Only define observation tensors for Tic-Tac-Toe

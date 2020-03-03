@@ -46,6 +46,7 @@ class PyspielTest(absltest.TestCase):
         "coop_box_pushing",
         "coop_to_1p",
         "deep_sea",
+        "efg_game",
         "first_sealed_auction",
         "go",
         "goofspiel",
