@@ -196,7 +196,6 @@ class PolicyGradient(rl_agent.AbstractAgent):
     # Add baseline (V) head for A2C.
     if loss_class.__name__ == "BatchA2CLoss":
       self._baseline = tf.squeeze(self._q_values_layer(torso_out), axis=1)
->>>>>>> b19852be38e65de2db20dc9be6659e522a72e83d
     else:
       # Add q-values head otherwise
       self._q_values = self._q_values_layer(torso_out)

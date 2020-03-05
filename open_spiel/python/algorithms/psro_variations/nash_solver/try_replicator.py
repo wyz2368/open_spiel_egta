@@ -1,4 +1,4 @@
-from open_spiel.python.algorithms.psro_variations.nash_solver import general_nash_solver as gs
+from open_spiel.python.algorithms.psro_variations.nash_solver.replicator_dynamics_solver import replicator_dynamics
 
 import numpy as np
 
@@ -49,16 +49,6 @@ elif game_name == 'HT':
 else:
     raise ValueError("Game does not exist.")
 
-equilibria = gs.nash_solver(meta_games, solver="replicator", mode='all')
-#equilibria = gs.nash_solver(meta_games,solver="lrsnash",lrsnash_path='./lrsnash')
-print(equilibria)
-for eq in equilibria:
-    print(eq)
 
-print("****************************************")
-equilibria = gs.nash_solver(meta_games, solver="gambit", mode='all')
-print(equilibria)
-for eq in equilibria:
-    print(eq)
-
-
+strategies = replicator_dynamics(meta_games)
+print(strategies)

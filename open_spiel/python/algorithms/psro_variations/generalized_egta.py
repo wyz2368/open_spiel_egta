@@ -501,7 +501,6 @@ class GenEGTASolver(abstract_meta_trainer_egta.AbstractMetaTrainer):
 
   def update_empirical_gamestate(self, seed=None):
     """Given new agents in _new_policies, update meta_games through simulations.
-    In the meanwhile, update nashconv matrix
 
     Args:
       seed: Seed for environment generation.
