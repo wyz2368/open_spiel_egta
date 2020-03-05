@@ -34,6 +34,7 @@ import logging
 from open_spiel.python.algorithms import lp_solver
 import pyspiel
 from open_spiel.python.algorithms.psro_variations.nash_solver.gambit_tools import do_gambit_analysis
+from open_spiel.python.algorithms.psro_variations.nash_solver.replicator_dynamics_solver import replicator_dynamics
 
 def renormalize(probabilities):
   """Replaces all non-zero entries with zeroes and normalizes the result.
@@ -146,14 +147,14 @@ def lemke_howson_solve(row_payoffs, col_payoffs):
     finally:
         warnings.showwarning = showwarning
 
-def gambit_solve(meta_games, mode, gambit_path):
+def gambit_solve(meta_games, mode):
     """
     Find NE using gambit.
     :param meta_games: meta-games in PSRO.
     :param mode: options "all", "one", "pure"
     :return: a list of NE.
     """
-    return do_gambit_analysis(meta_games, mode, gambit_path=gambit_path)
+    return do_gambit_analysis(meta_games, mode)
 
 def pure_ne_solve(meta_games, tol=1e-7):
     """
@@ -179,14 +180,14 @@ def pure_ne_solve(meta_games, tol=1e-7):
     return pure_ne
 
 def nash_solver(meta_games,
-                solver,#="nashpy",
+                solver,
                 mode="one",
                 gambit_path=None,
                 lrsnash_path=None):
     """
     Solver for NE.
     :param meta_games: meta-games in PSRO.
-    :param solver: options "gambit", "nashpy", "linear", "lrsnash".
+    :param solver: options "gambit", "nashpy", "linear", "lrsnash", "replicator".
     :param mode: options "all", "one", "pure"
     :param lrsnash_path: path to lrsnash solver.
     :return: a list of NE.
@@ -195,8 +196,10 @@ def nash_solver(meta_games,
     leads the os to block the subprocess. Not usable.
     """
     num_players = len(meta_games)
-    if solver == "gambit" or num_players > 2:
-        return gambit_solve(meta_games, mode, gambit_path)
+    if solver == "gambit":
+        return gambit_solve(meta_games, mode)
+    elif solver == "replicator":
+        return [replicator_dynamics(meta_games)]
     else:
         assert num_players == 2
 
@@ -207,6 +210,7 @@ def nash_solver(meta_games,
             equilibria = itertools.product(np.eye(num_rows), np.eye(num_cols))
         elif mode == 'pure':
             return pure_ne_solve(meta_games)
+
         elif solver == "linear":
             meta_games = [x.tolist() for x in meta_games]
             nash_prob_1, nash_prob_2, _, _ = (
