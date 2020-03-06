@@ -1,6 +1,7 @@
 import numpy as np
 from open_spiel.python.algorithms.psro_variations.nash_solver import subproc
 import os
+import glob
 import pickle
 import itertools
 import logging
@@ -41,16 +42,12 @@ def load_pkl(path):
     return result
 
 # Path that saves the payoff matrix for gamebit.
-gambit_DIR = os.getcwd() + '/nfg/payoffmatrix.nfg'
+gambit_DIR = os.path.dirname(os.path.realpath(__file__)) + '/nfg/payoffmatrix.nfg'
+try:
+  os.remove(gambit_DIR)
+except:
+  logging.info('nfg matrix does not exist prior to program runs')
 
-# This functions help to translate meta_games into gambit nfg.
-def product(shape, axes):
-    prod_trans = tuple(zip(*itertools.product(*(range(shape[axis]) for axis in axes))))
-
-    prod_trans_ordered = [None] * len(axes)
-    for i, axis in enumerate(axes):
-        prod_trans_ordered[axis] = prod_trans[i]
-    return zip(*prod_trans_ordered)
 
 def encode_gambit_file(meta_games):
     """
@@ -75,29 +72,32 @@ def encode_gambit_file(meta_games):
         num_strs += '}'
         nfgFile.write(num_strs + '\n\n')
         # Write outcomes
-        axes = tuple(reversed(range(num_players)))
-        for current_index in product(np.shape(meta_games[0]), axes):
+        for current_index in itertools.product(*range_iterators):
             for meta_game in meta_games:
                 nfgFile.write(str(meta_game[tuple(current_index)]) + " ")
 
-def gambit_analysis(timeout):
+def gambit_analysis(timeout, gambit_path=None):
     """
     Call a subprocess and run gambit to find all NE.
     :param timeout: Maximum time for the subprocess.
     """
     if not isExist(gambit_DIR):
         raise ValueError(".nfg file does not exist!")
-    command_str = "gambit-gnm -q " + os.getcwd() + "/nfg/payoffmatrix.nfg -d 8 > " + os.getcwd() + "/nfg/nash.txt"
+    command_str = "gambit-gnm -q " + os.path.dirname(os.path.realpath(__file__)) + "/nfg/payoffmatrix.nfg -d 8 > " + os.path.dirname(os.path.realpath(__file__)) + "/nfg/nash.txt"
+    if gambit_path!=None:
+        command_str = gambit_path +'./'+ command_str
     subproc.call_and_wait_with_timeout(command_str, timeout)
 
-def gambit_analysis_pure(timeout):
+def gambit_analysis_pure(timeout, gambit_path=None):
     """
     Call a subprocess and run gambit to find pure NE.
     :param timeout: Maximum time for the subprocess.
     """
     if not isExist(gambit_DIR):
         raise ValueError(".nfg file does not exist!")
-    command_str = "gambit-enumpure -q " + os.getcwd() + "/nfg/payoffmatrix.nfg > " + os.getcwd() + "/nfg/nash.txt"
+    command_str = "gambit-enumpure -q " + os.path.dirname(os.path.realpath(__file__)) + "/nfg/payoffmatrix.nfg > " + os.path.dirname(os.path.realpath(__file__)) + "/nfg/nash.txt"
+    if gambit_oath!=None:
+        command_str = gambit_path + './' + command_str
     subproc.call_and_wait_with_timeout(command_str, timeout)
 
 def decode_gambit_file(meta_games, mode="all", max_num_nash=10):
@@ -108,7 +108,7 @@ def decode_gambit_file(meta_games, mode="all", max_num_nash=10):
     :param max_num_nash: the number of NE considered to return
     :return: a list of NE
     """
-    nash_DIR = os.getcwd() + '/nfg/nash.txt'
+    nash_DIR = os.path.dirname(os.path.realpath(__file__)) + '/nfg/nash.txt'
     if not isExist(nash_DIR):
         raise ValueError("nash.txt file does not exist!")
     num_lines = file_len(nash_DIR)
@@ -153,7 +153,7 @@ def decode_gambit_file(meta_games, mode="all", max_num_nash=10):
         logging.info("mode is beyond all/pure/one.")
 
 
-def do_gambit_analysis(meta_games, mode, timeout = 600):
+def do_gambit_analysis(meta_games, mode, timeout = 600, gambit_path=None):
     """
     Combine encoder and decoder.
     :param meta_games: meta-games in PSRO.
@@ -164,11 +164,11 @@ def do_gambit_analysis(meta_games, mode, timeout = 600):
     encode_gambit_file(meta_games)
     while True:
         if mode == 'pure':
-            gambit_analysis_pure(timeout)
+            gambit_analysis_pure(timeout,gambit_path)
         else:
-            gambit_analysis(timeout)
+            gambit_analysis(timeout,gambit_path)
         # If there is no pure NE, find mixed NE.
-        nash_DIR = os.getcwd() + '/nfg/nash.txt'
+        nash_DIR = os.path.dirname(os.path.realpath(__file__)) + '/nfg/nash.txt'
         if not isExist(nash_DIR):
             raise ValueError("nash.txt file does not exist!")
         num_lines = file_len(nash_DIR)
