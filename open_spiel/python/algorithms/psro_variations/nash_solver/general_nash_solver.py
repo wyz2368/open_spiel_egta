@@ -147,14 +147,14 @@ def lemke_howson_solve(row_payoffs, col_payoffs):
     finally:
         warnings.showwarning = showwarning
 
-def gambit_solve(meta_games, mode):
+def gambit_solve(meta_games, mode, gambit_path=None):
     """
     Find NE using gambit.
     :param meta_games: meta-games in PSRO.
     :param mode: options "all", "one", "pure"
     :return: a list of NE.
     """
-    return do_gambit_analysis(meta_games, mode)
+    return do_gambit_analysis(meta_games, mode, gambit_path=gambit_path)
 
 def pure_ne_solve(meta_games, tol=1e-7):
     """
@@ -197,7 +197,7 @@ def nash_solver(meta_games,
     """
     num_players = len(meta_games)
     if solver == "gambit":
-        return gambit_solve(meta_games, mode)
+        return gambit_solve(meta_games, mode, gambit_path=gambit_path)
     elif solver == "replicator":
         return [replicator_dynamics(meta_games)]
     else:

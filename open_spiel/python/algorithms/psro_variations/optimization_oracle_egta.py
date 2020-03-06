@@ -73,7 +73,7 @@ class RLoracle(AbstractOracle):
         used_policies.append(selected_policies)
       return used_policies
 
-    def load(self,iter,chekckpoint_dir):
+    def load(self,iter,checkpoint_dir):
         """
         Construct game graphs and then load them
         """

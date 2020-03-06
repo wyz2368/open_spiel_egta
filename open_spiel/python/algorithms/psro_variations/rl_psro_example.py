@@ -25,7 +25,7 @@ logging.set_verbosity(logging.WARNING)
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string("game", "kuhn_poker", "Name of the game.")
-flags.DEFINE_integer("sims_per_entry", 30,
+flags.DEFINE_integer("sims_per_entry", 1,
                      "Number of simulations to update meta game matrix.")
 flags.DEFINE_integer("psro_iterations", 150, "Number of iterations.")
 flags.DEFINE_integer(
@@ -35,7 +35,8 @@ flags.DEFINE_string("oracle","a2c","type of rl algorithm to use for oracle")
 flags.DEFINE_string("root_result_folder",'root_result',"root directory of saved results")
 flags.DEFINE_boolean("record_train",True,'record training curve of each player, each iteration')
 flags.DEFINE_string("load_folder","","folder for load policy: the number of iteration will be determined")
-flags.DEFINE_string("nash_solver_path","/home/qmaai/gambit/bin/","lrsnash executable filepath or bin folder for gambit")
+flags.DEFINE_string("nash_solver_path","/home/qmaai/gambit_python3_supported/bin/","lrsnash executable filepath or bin folder for gambit")
+#flags.DEFINE_string("nash_solver_path","","lrsnash executable filepath or bin folder for gambit")
 
 def main(unused_argv):
   begin_iter = 0
@@ -51,7 +52,7 @@ def main(unused_argv):
           os.makedirs(FLAGS.root_result_folder)
       checkpoint_dir = os.path.join(os.getcwd(),FLAGS.root_result_folder,FLAGS.game+'_'+FLAGS.oracle+'_sims_'+str(FLAGS.sims_per_entry)+'_it'+str(FLAGS.psro_iterations)+'_ep'+str(FLAGS.number_episodes_sampled)+'_'+datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
       os.makedirs(checkpoint_dir)
-  sys.stdout = open(checkpoint_dir+'/stdout.txt','a+')
+  #sys.stdout = open(checkpoint_dir+'/stdout.txt','a+')
 
   game = pyspiel.load_game(FLAGS.game)
 
