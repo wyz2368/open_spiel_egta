@@ -180,7 +180,7 @@ def pure_ne_solve(meta_games, tol=1e-7):
     return pure_ne
 
 def nash_solver(meta_games,
-                solver,
+                solver="gambit",
                 mode="one",
                 gambit_path=None,
                 lrsnash_path=None):

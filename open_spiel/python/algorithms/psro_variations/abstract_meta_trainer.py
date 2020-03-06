@@ -120,7 +120,7 @@ def general_nash_strategy(solver):
   :return: Nash distribution on strategies.
   """
   meta_games = solver.get_meta_game
-  equilibria = general_nash_solver.nash_solver(meta_games)
+  equilibria = general_nash_solver.nash_solver(meta_games, solver="nashpy")
   return equilibria
 
 
@@ -143,7 +143,7 @@ def prd_strategy(solver):
 
 META_STRATEGY_METHODS = {
     "uniform": uniform_strategy,
-    "nash": general_nash_strategy,
+    "nash": nash_strategy,
     "prd": prd_strategy
 }
 

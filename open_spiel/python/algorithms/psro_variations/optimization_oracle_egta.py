@@ -43,7 +43,7 @@ class RLoracle(AbstractOracle):
                  session,
                  oracle='a2c',
                  number_episodes_sampled=100,
-		             checkpoint_dir=None,
+		         checkpoint_dir=None,
                  **kwargs):
         super(RLoracle, self).__init__(**kwargs)
         self._number_episodes_sampled = number_episodes_sampled
@@ -73,7 +73,7 @@ class RLoracle(AbstractOracle):
         used_policies.append(selected_policies)
       return used_policies
 
-    def load(self,iter,chekckpoint_dir):
+    def load(self, iter, checkpoint_dir):
         """
         Construct game graphs and then load them
         """
@@ -86,7 +86,7 @@ class RLoracle(AbstractOracle):
                   current_player,
                   self._env.observation_spec()["info_state"][0],
                   self._env.action_spec()["num_actions"])
-              load_variables(checkpoint_dir+'/'+scope_name,
+              load_variables(checkpoint_dir + '/'+scope_name,
                   tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES,scope=scope_name),
                   self._session)  
               policies[current_player].append(graph)
@@ -196,7 +196,7 @@ class RLoracle(AbstractOracle):
           if self._checkpoint_dir:
             save_variables(self._checkpoint_dir+'/'+scope_name,tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=scope_name),self._session)
 
-        return training_agent,avg_rewards
+        return training_agent, avg_rewards
       
 
 
