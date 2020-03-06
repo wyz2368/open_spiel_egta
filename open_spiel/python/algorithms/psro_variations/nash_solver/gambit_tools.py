@@ -49,6 +49,15 @@ except:
   logging.info('nfg matrix does not exist prior to program runs')
 
 
+# This functions help to translate meta_games into gambit nfg.
+def product(shape, axes):
+    prod_trans = tuple(zip(*itertools.product(*(range(shape[axis]) for axis in axes))))
+
+    prod_trans_ordered = [None] * len(axes)
+    for i, axis in enumerate(axes):
+        prod_trans_ordered[axis] = prod_trans[i]
+    return zip(*prod_trans_ordered)
+
 def encode_gambit_file(meta_games):
     """
     Encode a meta-game to nfg file that gambit can recognize.
@@ -72,7 +81,8 @@ def encode_gambit_file(meta_games):
         num_strs += '}'
         nfgFile.write(num_strs + '\n\n')
         # Write outcomes
-        for current_index in itertools.product(*range_iterators):
+        axes = tuple(reversed(range(num_players)))
+        for current_index in product(np.shape(meta_games[0]), axes):
             for meta_game in meta_games:
                 nfgFile.write(str(meta_game[tuple(current_index)]) + " ")
 
@@ -84,8 +94,8 @@ def gambit_analysis(timeout, gambit_path=None):
     if not isExist(gambit_DIR):
         raise ValueError(".nfg file does not exist!")
     command_str = "gambit-gnm -q " + os.path.dirname(os.path.realpath(__file__)) + "/nfg/payoffmatrix.nfg -d 8 > " + os.path.dirname(os.path.realpath(__file__)) + "/nfg/nash.txt"
-    if gambit_path!=None:
-        command_str = gambit_path +'./'+ command_str
+    if gambit_path != None:
+        command_str = gambit_path + './' + command_str
     subproc.call_and_wait_with_timeout(command_str, timeout)
 
 def gambit_analysis_pure(timeout, gambit_path=None):
@@ -96,7 +106,7 @@ def gambit_analysis_pure(timeout, gambit_path=None):
     if not isExist(gambit_DIR):
         raise ValueError(".nfg file does not exist!")
     command_str = "gambit-enumpure -q " + os.path.dirname(os.path.realpath(__file__)) + "/nfg/payoffmatrix.nfg > " + os.path.dirname(os.path.realpath(__file__)) + "/nfg/nash.txt"
-    if gambit_oath!=None:
+    if gambit_path != None:
         command_str = gambit_path + './' + command_str
     subproc.call_and_wait_with_timeout(command_str, timeout)
 
