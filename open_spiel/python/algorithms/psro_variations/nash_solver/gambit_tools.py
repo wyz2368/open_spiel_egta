@@ -123,7 +123,7 @@ def decode_gambit_file(meta_games, mode="all", max_num_nash=10):
         raise ValueError("nash.txt file does not exist!")
     num_lines = file_len(nash_DIR)
 
-    logging.info("Number of NE is ", num_lines)
+    logging.info("Number of NE is {}".format(num_lines))
     if max_num_nash != None:
         if num_lines >= max_num_nash:
             num_lines = max_num_nash
