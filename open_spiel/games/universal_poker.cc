@@ -31,8 +31,6 @@
 namespace open_spiel {
 namespace universal_poker {
 
-const absl::string_view kEmptyString = "";
-
 const GameType kGameType{
     /*short_name=*/"universal_poker",
     /*long_name=*/"Universal Poker",
@@ -66,7 +64,7 @@ const GameType kGameType{
 
      // The ACPC gamedef string.  When present, it will take precedence over
      // everything and no other argument should be provided.
-     {"gamedef", GameParameter(std::string(kEmptyString))},
+     {"gamedef", GameParameter(std::string(""))},
      // Instead of a single gamedef, specifying each line is also possible.
      // The documentation is adapted from project_acpc_server/game.cc.
      //
@@ -90,7 +88,7 @@ const GameType kGameType{
      {"firstPlayer", GameParameter(std::string("1 1"))},
      // maxraises - the maximum number of raises on each round. If not
      // specified, it will default to UINT8_MAX.
-     {"maxRaises", GameParameter(std::string(kEmptyString))},
+     {"maxRaises", GameParameter(std::string(""))},
      // The number of different suits in the deck
      {"numSuits", GameParameter(4)},
      // The number of different ranks in the deck
@@ -678,18 +676,18 @@ std::string UniversalPokerGame::parseParameters(const GameParameters &map) {
       "numBoardCards = ", ParameterValue<std::string>("numBoardCards"), "\n");
 
   std::string max_raises = ParameterValue<std::string>("maxRaises");
-  if (max_raises != kEmptyString) {
+  if (!max_raises.empty()) {
     absl::StrAppend(&generated_gamedef, "maxRaises = ", max_raises, "\n");
   }
 
   if (ParameterValue<std::string>("betting") == "limit") {
     std::string raise_size = ParameterValue<std::string>("raiseSize");
-    if (raise_size != kEmptyString) {
+    if (!raise_size.empty()) {
       absl::StrAppend(&generated_gamedef, "raiseSize = ", raise_size, "\n");
     }
   } else if (ParameterValue<std::string>("betting") == "nolimit") {
     std::string stack = ParameterValue<std::string>("stack");
-    if (stack != kEmptyString) {
+    if (!stack.empty()) {
       absl::StrAppend(&generated_gamedef, "stack = ", stack, "\n");
     }
   } else {
