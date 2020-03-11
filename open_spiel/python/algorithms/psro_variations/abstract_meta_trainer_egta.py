@@ -109,7 +109,7 @@ def nash_strategy(solver):
   ]
 
 # NEW
-def general_nash_strategy(solver,solver_path):
+def general_nash_strategy(solver,solver_path, meta_games=None):
   """
   Returns nash distribution on meta game matrix.
   This method works for general-sum many-player games. Details see nash_solver directory.
@@ -123,11 +123,10 @@ def general_nash_strategy(solver,solver_path):
   As lemke_howson_solve fails in degenerate game
   lrs_nash open a subprocess every iteration and eventually is blocked by os
   """
-  meta_games = solver.get_meta_game
+  meta_games = meta_games or solver.get_meta_game
   equilibria = general_nash_solver.nash_solver(meta_games,solver='gambit',mode='one',gambit_path=solver_path)
   equilibria = general_nash_solver.normalize_ne(equilibria)
   return equilibria
-
 
 def prd_strategy(solver):
   """Computes Projected Replicator Dynamics strategies.

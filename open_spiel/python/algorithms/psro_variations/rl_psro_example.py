@@ -36,6 +36,7 @@ flags.DEFINE_string("root_result_folder",'root_result',"root directory of saved 
 flags.DEFINE_boolean("record_train",True,'record training curve of each player, each iteration')
 flags.DEFINE_string("load_folder","","folder for load policy: the number of iteration will be determined")
 flags.DEFINE_string("nash_solver_path","/home/qmaai/gambit_python3_supported/bin/","lrsnash executable filepath or bin folder for gambit")
+flags.DEFINE_string("quiesce",True,"whether to use quiesce for innerloop")
 #flags.DEFINE_string("nash_solver_path","","lrsnash executable filepath or bin folder for gambit")
 
 def main(unused_argv):
@@ -69,6 +70,7 @@ def main(unused_argv):
       oracle=oracle,
       session=global_sess,
       sims_per_entry=FLAGS.sims_per_entry,
+      quiesce=FLAGS.quiesce,
       nash_solver_path=FLAGS.nash_solver_path)
   
   if FLAGS.load_folder!='':

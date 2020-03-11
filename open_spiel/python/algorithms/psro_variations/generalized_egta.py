@@ -45,6 +45,7 @@ import pickle
 from open_spiel.python.algorithms.psro_variations import abstract_meta_trainer_egta
 from open_spiel.python.algorithms import exploitability
 from open_spiel.python.policy_egta import UniformAgent,RLPolicy
+from open_spiel.python.algorithms import policy_aggregator
 from open_spiel.python import rl_environment
 
 # Constant, specifying the threshold below which probabilities are considered
@@ -298,8 +299,8 @@ class GenEGTASolver(abstract_meta_trainer_egta.AbstractMetaTrainer):
     self.set_strategy_selection_method(training_strategy_selector)
     self._meta_strategy_str = meta_strategy_method
     self._nash_solver_path = kwargs['nash_solver_path'] or None
-    self._nash_conv = {}
     self._symmetric = symmetric
+    self._quiesce = kwargs['quiesce'] or False
     super(GenEGTASolver, self).__init__(game, oracle, initial_policies,
                                         meta_strategy_method, **kwargs)
     
@@ -316,6 +317,10 @@ class GenEGTASolver(abstract_meta_trainer_egta.AbstractMetaTrainer):
          [UniformAgent(self._game)])
         for k in range(self._num_players)
     ]
+    if initial_policies:
+        self._complete_ind = [[1 for _ in range(len(initial_policies[i]))] for i in range(self._num_players)]
+    else:
+        self._complete_ind = [[1] for _ in range(self._num_players)]
 
   def _initialize_game_state(self):
     self._meta_games = [
@@ -323,7 +328,7 @@ class GenEGTASolver(abstract_meta_trainer_egta.AbstractMetaTrainer):
         for _ in range(self._num_players)
     ]
 
-    self.update_empirical_gamestate(seed=None)
+    self.update_empirical_gamestate(seed=None,add_sample=True)
 
   def load(iter,checkpoint_dir,attr_file=None):
     """
@@ -331,20 +336,20 @@ class GenEGTASolver(abstract_meta_trainer_egta.AbstractMetaTrainer):
     Params  :
     iter          : number of iter to start from
     checkpoint_dir: directory for tf graphs to be stored
-    attr_file     : stores self._meta_games, self._nash_conv
+    attr_file     : stores self._meta_games
     """
     self._policies = self._oracle.load(it,checkpoint_dir)
     if attr_file is not None:
       pklfile = open(attr_file,'rb')
       data = pickle.load(pklfile)
       self._meta_games = data[0]
-      self._nash_conv = data[1]
       pklfile.close()
     else:
       self._fill_meta_games()
      
   def _fill_meta_games(self):
     # fill in meta game matrix, nash conv matrix is automatically filled
+    # Used after loading the games
     num_of_policy = len(self._policies[0])
     self._meta_games = [
         np.ones([num_of_policy for _ in range(self._num_players)])*np.infty for _ in range(self._num_players)
@@ -356,10 +361,10 @@ class GenEGTASolver(abstract_meta_trainer_egta.AbstractMetaTrainer):
   
   def save_attr(self,iter,attr_file):
     """
-    Save attributes: self._meta_games,self._nash_conv
+    Save attributes: self._meta_games
     """
     pklfile = open(attr_file,'wb')
-    pickle.dump([self._meta_games,self._nash_conv],pklfile)
+    pickle.dump([self._meta_games],pklfile)
     pklfile.close()
 
   def set_strategy_selection_method(self, training_strategy_selector):
@@ -405,28 +410,124 @@ class GenEGTASolver(abstract_meta_trainer_egta.AbstractMetaTrainer):
           self._new_policies.append(current_new_policies)
       return {'train_iter'+str(iter)+'_p'+str(i):training_curves[i] for i in range(len(training_curves))}
 
+  def inner_loop(self):
+      found_confirmed_eq = False
+      while not found_confirmed_eq:
+          maximum_subgame = self.get_complete_meta_game
+          ne_subgame = abstract_meta_trainer_egta.general_nash_strategy(self,self._nash_solver_path,maximum_subgame)
+          # reform equilibrium support in the full empirical game
+          # ne_support: 0 and 1, size full empirical game indicating support for eq
+          ne_support = self._complete_ind.copy()
+          for i in range(self._num_players):
+              complete_pol = np.where(np.array(ne_support[i])==1)[0]
+              for j in len(complete_pol):
+                  if ne_subgame[i][j]==0:
+                      ne_support[i][complete_pol[j]] = 0
+          # ne_support_num: list of list, index of where equilibrium is [[0,1],[2]]
+          ne_support_num = [np.where(np.array(ne_support[i])==1)[0] 
+                  for i in range(self._num_players)]
+          # ne_subgame: non-zero equilibrium support, [[0.1,0.5,0.4],[0.2,0.4,0.4]]
+          ne_subgame_nonzero = [np.array(ele) for ele in ne_subgame]
+          ne_subgame_nonzero = [ele[ele!=0] for ele in ne_subgame_nonezero]
+          # get players' payoffs in nash equilibrium
+          ne_payoffs = self.get_mixed_payoff(ne_support_num,ne_subgame_nonzero)
+          # all possible deviation payoffs
+          dev_pol, dev_payoffs = schedule_deviation(ne_support_num,ne_subgame_nonzero)
+          # check max deviations and sample full subgame where beneficial deviation included
+          dev = []
+          maximum_subgame_index = [np.where(np.array(ele)==1)[0] for ele in self._complete_ind[i]]
+          for i in range(self._num_players):
+              if max(dev_payoffs[i]) > ne_payoffs[i]:
+                  pol = np.argmax(dev_payoffs[i])
+                  new_subgame_sample_ind = maximum_subgame_index.copy()
+                  new_subgame_sample_ind[i] = [pol]
+                  # add best deviation into subgame and sample it
+                  for pol in itertools.product(new_subgame_sample_ind):
+                      self.sample_pure_policy_to_empirical_game(pol) 
+                  dev.append(i)
+                  # all other player's policies have to sample previous players' best deviation
+                  maximum_subgame_index[i].append(pol)
+          found_confirmed_eq = (len(confirmed_eq)==0)
+          # debug: check maximum subgame remains the same
+          # debug: check maximum game reached
+
+      # return confirmed nash equilibrium
+      eq = []
+      for p in range(self._num_players):
+          eq_p = np.zeros([len(self._policies[p])],dtype=float)
+          np.put(eq_p,ne_support_num[p],ne_subgame_nonzero[p])
+          eq.append(eq_p)
+      return eq 
+
+  def schedule_deviation(self,eq,eq_sup):
+      """
+      Sample all possible deviation from eq
+      Return a list of best deviation for each player
+      if none for a player, return None for that player
+      Params:
+        eq     :  list of list, where equilibrium is.[[1],[0]]: an example of 2x2 game
+        eq_sup :  Exact same shape with eq. Documents equilibrium support
+      """
+      devs = []
+      dev_pol = []
+      for p in range(self._num_players):
+          # check all possible deviations
+          dev = []
+          possible_dev = list(np.where(np.array(self._complete_ind[p])==0)[0])
+          iter_eq = eq.copy()
+          iter_eq[p] = possible_dev
+          for pol in itertools.product(iter_eq):
+              self.sample_pure_policy_to_empirical_game(pol)
+          for pol in possible_dev:
+              stra_li,stra_sup = eq.copy(),eq_sup.copy()
+              stra_li[p] = [pol]
+              stra_sup[p] = [1]
+              dev.append(self.get_mixed_payoff(stra_li,stra_sup)[p])
+          devs.append(dev)
+          dev_pol.append(possible_dev)
+      return dev_pol, devs
+
+  def get_mixed_payoff(self,strategy_list,strategy_support):
+      """
+      Check if the payoff exists. If not, return False
+      Params:
+        strategy_list    : [[],[]] 2 dimensional list, nash support policy index
+        strategy_support : [[],[]] 2 dimensional list, nash support probability for corresponding strategies
+      """
+      meta_game = [self._meta_games[i][tuple(strategy_list)] for i in range(self._num_players)]
+      prob_matrix = np.outer(strategy_support[0],strategy[1])
+      for i in range(self._num_players-2):
+          ind = tuple([Ellipsis for _ in range(len(prob_matrix.shape))]+[None])
+          prob_matrix = prob_matrix[ind]*strategy_support[i+2]
+      payoffs=[]
+      for i in range(self._num_players):
+          subgame = self._meta_games[i][tuple(strategy_list)]
+          if np.any(np.isnan(subgame)):
+              return False
+          else
+              payoffs.append(np.inner(subgame,prob_matrix))
+      return payoffs
+      
   def evaluate_nash_conv(self):
       """
       evaluate nash conv for the current nash equilibrium
       First compute NE of current empirical_game
-      Then fill in missing entry of nash conv value for pure strategy
-      Finally calculate nash conv of mixed strategy
       self._nash_prob    : [[],[]] 2 dimensional list
       ne_support         : [[],[]] 2 dimensional list, nash support policy index
       ind                : (,,) index of pure strategy profile, length num_of_player
       """
       nash_conv_mixed = 0
-      self._nash_prob = abstract_meta_trainer_egta.general_nash_strategy(self,self._nash_solver_path)
-      num_of_policy = len(self._nash_prob[0])
-      ne_support =  [[i for i in range(num_of_policy) if ele[i]!=0] for ele in self._nash_prob]
-      for ind in itertools.product(*ne_support):
-          ne_prob = np.prod([self._nash_prob[i][ind[i]] for i in range(self._num_players)])
-          if ind not in self._nash_conv.keys():
-              policy = [self._policies[i][ind[i]] for i in range(self._num_players)]
-              rl_policy = RLPolicy(self._game,policy)
-              self._nash_conv[ind] = exploitability.nash_conv(self._game,rl_policy)
-          nash_conv_mixed += self._nash_conv[ind]*ne_prob
-      return nash_conv_mixed
+      if self._quiesce:
+          self._nash_prob = self.inner_loop()
+      else:
+          self._nash_prob = abstract_meta_trainer_egta.general_nash_strategy(self,self._nash_solver_path)
+      
+      aggregator = policy_aggregator.PolicyAggregator(self._game)
+      aggr_policies = aggregator.aggregate(
+          range(self._num_players), self._policies, self._nash_prob)
+      exploitabilities = exploitability.nash_conv(
+          self._game, aggr_policies, return_only_nash_conv=True)
+      return exploitabilities
 
   def evaluate_iteration(self):
       """
@@ -448,7 +549,7 @@ class GenEGTASolver(abstract_meta_trainer_egta.AbstractMetaTrainer):
       self._iterations += 1
       self.update_meta_strategies()  # Compute nash equilibrium.
       train_dict = self.update_rl_agents(iter)  # Generate new, Best Response agents via oracle.
-      self.update_empirical_gamestate(seed=seed)  # Update gamestate matrix.
+      self.update_empirical_gamestate(seed=seed,add_sample=not self._quiesce)  # Update gamestate matrix.
       eval_dict = self.evaluate_iteration() # evaluate iteration using nashconv or combined game
       eval_dict.update(train_dict)
       return eval_dict
@@ -498,8 +599,44 @@ class GenEGTASolver(abstract_meta_trainer_egta.AbstractMetaTrainer):
       totals += self.rl_sample_episode(policies).reshape(-1)
     return totals / num_episodes
 
+  def update_complete_ind(self, policy_indicator, add_sample=True):
+      """
+      Find the maximum completed subgame with newly added policy(one policy for each player)
+      Params:
+        policy_indicator: policy to check, one number for each player
+        add_sample      : whether there are sample data added after last update
+      """
+      
+      for i in range(self._num_players):
+        for _ in range(len(self._policies)-len(self._complete_ind[i])):
+            self._complete_ind[i].append(0)
+        if not add_sample:
+            continue
+        mask = np.zeros([len(self._policies[i]) for i in range(self._num_players)],dtype=bool)
+        ind =  [Ellipsis]*mask.ndim
+        ind[i] = policy_indicator(p)
+        mask[ind]=True
+         
+        if not np.any(np.ma.masked_array(self._meta_games[i],mask)==np.nan):
+            self._complete_ind[i][p] = 1
 
-  def update_empirical_gamestate(self, seed=None):
+  def sample_pure_policy_to_empirical_game(self, policy_indicator):
+      """
+      add data samples to data grid
+      Params:
+        policy_indicator: 1 dim list, containing poicy to sample for each player
+      """
+      if self._meta_games[tuple(policy_indicator)]!=np.nan:
+        return False
+      estimated_policies = [self._policies[i][policy_indicator[i]
+          for i in range(self._num_players)]
+      utility_estimates = self.rl_sample_episodes(estimated_policies,self._sims_per_entry)
+      for k in range(self._num_players):
+        self._meta_games[k][tuple(policy_indicator)] = utility_estimates[k]
+      self.update_complete_ind(policy_indicator,add_sample=True)    
+      return True
+
+  def update_empirical_gamestate(self, seed=None, add_sample=False):
     """Given new agents in _new_policies, update meta_games through simulations.
 
     Args:
@@ -542,33 +679,37 @@ class GenEGTASolver(abstract_meta_trainer_egta.AbstractMetaTrainer):
     for k in range(self._num_players):
       meta_games[k][older_policies_slice] = self._meta_games[k]
 
-    # Filling the matrix for newly added policies.
-    for current_player in range(self._num_players):
-      # Only iterate over new policies for current player ; compute on every
-      # policy for the other players.
-      range_iterators = [
-          range(total_number_policies[k]) for k in range(current_player)
-      ] + [range(number_new_policies[current_player])] + [
-          range(total_number_policies[k])
-          for k in range(current_player + 1, self._num_players)
-      ]
-      for current_index in itertools.product(*range_iterators):
-        used_index = list(current_index)
-        used_index[current_player] += number_older_policies[current_player]
-        if np.isnan(meta_games[current_player][tuple(used_index)]):
-          estimated_policies = [
-              updated_policies[k][current_index[k]]
-              for k in range(current_player)
-          ] + [
-              self._new_policies[current_player][current_index[current_player]]
-          ] + [
-              updated_policies[k][current_index[k]]
+    if add_sample:
+        # Filling the matrix for newly added policies.
+        for current_player in range(self._num_players):
+          # Only iterate over new policies for current player ; compute on every
+          # policy for the other players.
+          range_iterators = [
+              range(total_number_policies[k]) for k in range(current_player)
+          ] + [range(number_new_policies[current_player])] + [
+              range(total_number_policies[k])
               for k in range(current_player + 1, self._num_players)
           ]
-          # change to the rl_sample_episode.
-          utility_estimates = self.rl_sample_episodes(estimated_policies, self._sims_per_entry)
-          for k in range(self._num_players):
-            meta_games[k][tuple(used_index)] = utility_estimates[k]
+          for current_index in itertools.product(*range_iterators):
+            used_index = list(current_index)
+            used_index[current_player] += number_older_policies[current_player]
+            if np.isnan(meta_games[current_player][tuple(used_index)]):
+              estimated_policies = [
+                  updated_policies[k][current_index[k]]
+                  for k in range(current_player)
+              ] + [
+                  self._new_policies[current_player][current_index[current_player]]
+              ] + [
+                  updated_policies[k][current_index[k]]
+                  for k in range(current_player + 1, self._num_players)
+              ]
+              # change to the rl_sample_episode.
+              utility_estimates = self.rl_sample_episodes(estimated_policies, self._sims_per_entry)
+              for k in range(self._num_players):
+                meta_games[k][tuple(used_index)] = utility_estimates[k]
+
+    assert sum(number_new_policies)==len(number_new_policies)
+    self.update_complete_ind(number_older_policies,add_sample=add_sample)
 
     self._meta_games = meta_games
     self._policies = updated_policies
@@ -580,6 +721,20 @@ class GenEGTASolver(abstract_meta_trainer_egta.AbstractMetaTrainer):
     return self._meta_games
 
   @property
+  def get_complete_meta_game(self):
+    """
+    Returns the maximum complete game matrix
+    in the same form as empirical game
+    """
+    mask = np.ones([len(ele) for ele in self._complete_ind],dtype=bool)
+    for i in range(self._num_players):
+        ind = [Ellipsis]*mask.ndim
+        ind[i] = list(np.where(np.array(self._complete_ind[i])==0)[0])
+        mask[ind] = False
+    complete_subgame = [np.ma.masked_array(self._meta_games[i],mask=mask) for i in range(self._num_players)]
+    return complete_subgame
+
+  @property
   def get_policies(self):
     """Returns the players' policies."""
     return self._policies
@@ -587,7 +742,3 @@ class GenEGTASolver(abstract_meta_trainer_egta.AbstractMetaTrainer):
   @property
   def get_strategy_computation_and_selection_kwargs(self):
     return self._strategy_computation_and_selection_kwargs
-
-  def get_nash_conv(self):
-    """Returns the nash conv matrix."""
-    return self._nash_conv
